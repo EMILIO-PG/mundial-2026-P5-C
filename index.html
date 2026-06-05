@@ -105,6 +105,8 @@ html,body{overflow-x:hidden;max-width:100%}
 
 /* ── INICIO ────────────────────────────────────── */
 .inicio-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem}
+.inicio-2col{display:grid;grid-template-columns:1fr 260px;gap:1.5rem;align-items:start}
+@media(max-width:768px){.inicio-2col{grid-template-columns:1fr}}
 @media(max-width:900px){.inicio-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:600px){.inicio-grid{grid-template-columns:1fr}}
 
@@ -521,7 +523,7 @@ html,body{overflow-x:hidden;max-width:100%}
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 260px;gap:1.5rem;align-items:start">
+      <div class="inicio-2col">
         <div>
           <div class="sh"><h2>Sistema de puntos</h2></div>
           <div class="pts-grid">
