@@ -980,10 +980,12 @@ async function calcPtsTodos(pid){
     const part=PARTIDOS_GRUPOS.find(x=>x.id===pid);
     const res=resultados[pid];
     if(!part||!res) return;
-    const snap=await db.collection('pronosticos').get();
+    const users=await db.collection('usuarios').get();
     const batch=db.batch();
-    for(const ud of snap.docs){
-      const ps=await ud.ref.collection('partidos').doc(pid).get();
+    for(const ud of users.docs){
+      const uid=ud.id;
+      const pref=db.collection('pronosticos').doc(uid).collection('partidos').doc(pid);
+      const ps=await pref.get();
       if(!ps.exists) continue;
       const pr=ps.data();
       if(pr.local===undefined||pr.visitante===undefined) continue;
@@ -998,25 +1000,26 @@ async function calcPtsTodos(pid){
         else if(ex)pts=PUNTOS.MARCADOR_EXACTO;else pts=PUNTOS.RESULTADO_CORRECTO;
       }
       // Guardar los puntos DENTRO del propio pronóstico (idempotente: sobrescribe, no suma)
-      batch.set(ud.ref.collection('partidos').doc(pid),{pts:pts,acierto:pts>0},{merge:true});
+      batch.set(pref,{pts:pts,acierto:pts>0},{merge:true});
     }
     await batch.commit();
     // Recalcular el TOTAL de cada usuario sumando todos sus pronósticos puntuados
-    await recalcularTotales();
+    await recalcularTotales(users);
   }catch(e){console.error('Error calc pts:',e);}
 }
 
 // Suma los pts de TODOS los pronósticos de cada usuario y reescribe su total.
 // Como suma desde cero cada vez, corregir un resultado nunca infla los puntos.
-async function recalcularTotales(){
+async function recalcularTotales(users){
   try{
-    const snap=await db.collection('pronosticos').get();
+    if(!users) users=await db.collection('usuarios').get();
     const batch=db.batch();
-    for(const ud of snap.docs){
-      const parts=await ud.ref.collection('partidos').get();
+    for(const ud of users.docs){
+      const uid=ud.id;
+      const parts=await db.collection('pronosticos').doc(uid).collection('partidos').get();
       let puntos=0, aciertos=0;
       parts.forEach(d=>{ const x=d.data(); puntos+=(x.pts||0); if(x.acierto) aciertos++; });
-      batch.update(db.collection('usuarios').doc(ud.id),{puntos:puntos,aciertos:aciertos});
+      batch.update(db.collection('usuarios').doc(uid),{puntos:puntos,aciertos:aciertos});
     }
     await batch.commit();
   }catch(e){console.error('Error recalc totales:',e);}
