@@ -145,10 +145,11 @@ html,body{overflow-x:hidden;max-width:100%}
 .ecu-tx p{font-size:.76rem;color:rgba(255,255,255,.5);line-height:1.5}
 .ecu-tx strong{color:#fff}
 
-/* ── PARTIDO CARDS (2 columnas) ────────────────── */
-.partidos-2col{display:grid;grid-template-columns:1fr 1fr;gap:0}
-.partidos-2col>*{min-width:0}
-@media(max-width:768px){.partidos-2col{grid-template-columns:1fr}}
+/* ── PARTIDO CARDS ──────────────────────────────
+   auto-fit por CONTENEDOR: 1 columna si es angosto, 2 si es ancho.
+   No depende del ancho de pantalla → funciona en cualquier móvil. */
+.partidos-2col{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:0;width:100%;max-width:100%}
+.partidos-2col>*{min-width:0;max-width:100%}
 /* Cards de partido en GRUPOS: con aire entre ellas, no pegadas */
 #g-detail .partidos-2col{gap:.85rem}
 #g-detail .partidos-2col .pc{margin:0;border:1px solid var(--ln)}
@@ -191,9 +192,8 @@ html,body{overflow-x:hidden;max-width:100%}
 .ctx-panel.open{display:block}
 .ctx-contexto{font-size:.75rem;color:var(--g4);line-height:1.6;margin-bottom:.65rem;padding-bottom:.65rem;border-bottom:1px solid var(--ln)}
 .ctx-contexto strong{color:var(--k)}
-.ctx-jgrid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.6rem}
+.ctx-jgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:.5rem;margin-bottom:.6rem}
 .ctx-jgrid>*{min-width:0}
-@media(max-width:768px){.ctx-jgrid{grid-template-columns:1fr}}
 .ctx-j{border:1px solid var(--ln);padding:.55rem .65rem;background:var(--w)}
 .ctx-jlbl{font-size:.52rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--g3);margin-bottom:.4rem}
 .ctx-jrow{display:flex;align-items:center;gap:.4rem;margin-bottom:.3rem}
@@ -383,8 +383,8 @@ html,body{overflow-x:hidden;max-width:100%}
 .sim-bracket-hint{font-size:.66rem;color:var(--g3);margin-bottom:.85rem;line-height:1.4}
 
 /* inicio partidos - full width 2 cols */
-#inicio-parts{display:grid;grid-template-columns:1fr 1fr;gap:0}
-#inicio-parts>*{min-width:0}
+#inicio-parts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:0;width:100%;max-width:100%}
+#inicio-parts>*{min-width:0;max-width:100%}
 #inicio-parts .pc{margin-right:-1px;margin-bottom:-1px}
 @media(max-width:768px){#inicio-parts{grid-template-columns:1fr}}
 
@@ -430,9 +430,7 @@ html,body{overflow-x:hidden;max-width:100%}
   .fg input{font-size:16px}
   .ai{font-size:16px;width:46px}
   .pi{font-size:1.4rem}
-  /* Refuerzo: las cards de partido SIEMPRE a 1 columna y contenidas (calendario incluido) */
-  .partidos-2col{grid-template-columns:1fr !important;width:100%;max-width:100%}
-  .partidos-2col .pc{width:100%;max-width:100%}
+  /* Contención extra del calendario en móvil */
   #cal-content{width:100%;max-width:100%;overflow:hidden}
   .cal-wrap{max-width:100%;overflow:hidden}
 }
@@ -1546,5 +1544,6 @@ function toast(msg,type='ok'){
   clearTimeout(window._tt); window._tt=setTimeout(()=>t.classList.remove('show'),3500);
 }
 </script>
+<div style="text-align:center;padding:.5rem;font-size:.55rem;color:#bbb;letter-spacing:1px">v2.1</div>
 </body>
 </html>
