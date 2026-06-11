@@ -451,9 +451,26 @@ html,body{overflow-x:hidden;max-width:100%}
   .fg input{font-size:16px}
   .ai{font-size:16px;width:46px}
   .pi{font-size:1.4rem}
-  /* Contención extra del calendario en móvil */
+  /* ── Calendario en móvil: rejilla de píldoras que se ajusta sola ── */
   #cal-content{width:100%;max-width:100%;overflow:hidden}
-  .cal-wrap{max-width:100%;overflow:hidden}
+  .cal-wrap{max-width:100%;overflow:visible}
+  .cal-arrow{display:none}                 /* sin flechas en móvil */
+  .cal-dias{
+    padding:0;                              /* ya no hace falta dejar hueco a las flechas */
+    overflow-x:visible;
+    flex-wrap:wrap;                         /* las fechas bajan de línea en vez de cortarse */
+    gap:.4rem;
+    justify-content:flex-start;
+  }
+  .cal-dia{
+    flex:1 1 calc(20% - .4rem);             /* 5 por fila aprox., se reparten parejo */
+    min-width:0;                            /* permite que encojan sin desbordar */
+    max-width:calc(20% - .4rem);
+    padding:.45rem .2rem;
+  }
+  .cal-dia .dn{font-size:.95rem}
+  .cal-dia .dm{font-size:.46rem}
+  .cal-dia .dc{font-size:.44rem}
 }
 </style>
 </head>
@@ -605,6 +622,8 @@ html,body{overflow-x:hidden;max-width:100%}
           <div id="inicio-parts"></div>
         </div>
         <div>
+          <div class="sh"><h2>Mi carnet</h2><a onclick="goTo('perfil')">Ver perfil →</a></div>
+          <div id="inicio-carnet" style="margin-bottom:1.25rem"></div>
           <div class="ecu-bar">
             <div class="ecu-s"><div class="es1"></div><div class="es2"></div><div class="es3"></div></div>
             <div class="ecu-inner">
@@ -805,6 +824,7 @@ function goSlide(i){
 async function initApp(){
   initSlider();
   await Promise.all([loadResultados(), loadMisP(), loadFFBracket()]);
+  actualizarMiContador(); // backfill: deja mi contador al día apenas entro
   updateTopPts();
   renderInicio(); renderHoy(); renderGrupos(); renderCalendario(); renderFaseFinal(); renderSimulador();
 }
@@ -813,6 +833,16 @@ async function loadResultados(){
 }
 async function loadMisP(){
   try{ const s=await db.collection('pronosticos').doc(CU.uid).collection('partidos').get(); s.forEach(d=>misP[d.id]=d.data()); }catch(e){}
+}
+// Escribe en MI propio doc de usuario cuántos pronósticos llevo hechos.
+// Es una escritura sobre mi propio documento (las reglas ya lo permiten),
+// y deja el número visible para que otros lo vean en su carnet y ranking.
+async function actualizarMiContador(){
+  if(!CU) return;
+  let he=0;
+  Object.keys(misP).forEach(k=>{ const x=misP[k]; if(x&&x.local!==undefined&&x.visitante!==undefined) he++; });
+  if(CUD) CUD.stHechos=he;
+  try{ await db.collection('usuarios').doc(CU.uid).update({stHechos:he}); }catch(e){}
 }
 async function loadFFBracket(){
   try{ const d=await db.collection('usuarios').doc(CU.uid).collection('meta').doc('ffBracket').get(); if(d.exists&&d.data().win) ffWin=d.data().win; }catch(e){}
@@ -1017,6 +1047,9 @@ async function guardar(btn,pid,local,vis){
   try{
     await db.collection('pronosticos').doc(CU.uid).collection('partidos').doc(pid).set(data);
     misP[pid]=data; toast('¡Pronóstico guardado! ⚽','ok');
+    // Sincronizar el contador público de pronósticos en mi propio doc de usuario.
+    // Así otros jugadores ven mi número real en su carnet/ranking, sin esperar al admin.
+    actualizarMiContador();
     // Re-render de todas las vistas: sincroniza puntos, tablas de grupo y feedback en cada pestaña
     updateTopPts(); renderInicio(); renderHoy(); renderGrupos(); renderCalendario();
   }catch(e){toast('Error al guardar. Verifica tu conexión.','err');}
@@ -1189,7 +1222,21 @@ function renderInicio(){
   const prox=PARTIDOS_GRUPOS.filter(p=>estadoP(p)==='hoy'||estadoP(p)==='futuro').slice(0,4);
   const el=document.getElementById('inicio-parts');
   el.innerHTML=prox.length?prox.map(p=>partidoCard(p)).join(''):'<p style="color:var(--g3);font-size:.75rem;padding:.5rem">No hay partidos próximos.</p>';
+  renderInicioCarnet();
   renderInicioRank();
+}
+// Carnet del jugador en la pantalla de inicio (mismo diseño que Mi Perfil)
+async function renderInicioCarnet(){
+  const el=document.getElementById('inicio-carnet');
+  if(!el) return;
+  const st=misStatsLive();
+  let puesto=null, total=null;
+  try{
+    const snap=await db.collection('usuarios').orderBy('puntos','desc').get();
+    total=snap.size; let pos=1;
+    snap.forEach(d=>{ if(d.id===CU.uid) puesto=pos; pos++; });
+  }catch(e){}
+  el.innerHTML=carnetHTML({nombre:CUD?.nombre||CU.email.split('@')[0], puntos:CUD?.puntos||0, puesto, total, ...st});
 }
 
 // ── CARNET DE JUGADOR (Mi Perfil + perfiles ajenos) ──
