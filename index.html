@@ -1167,9 +1167,16 @@ async function recalcularTotales(users){
       const parts=await db.collection('pronosticos').doc(uid).collection('partidos').get();
       let puntos=0, aciertos=0, ex=0, co=0, fa=0, he=0;
       parts.forEach(d=>{ const x=d.data();
-        if(x.local!==undefined&&x.visitante!==undefined) he++;
+        if(x.local===undefined||x.visitante===undefined) return;
+        he++;
         puntos+=(x.pts||0); if(x.acierto) aciertos++;
-        if(x.tipo==='exacto') ex++; else if(x.tipo==='resultado') co++; else if(x.tipo==='fallo') fa++;
+        // Clasificar contra el resultado oficial (funciona con pronósticos viejos y nuevos)
+        const res=resultados[d.id];
+        if(!res||!res.finalizado) return;
+        const pl=parseInt(x.local), pv=parseInt(x.visitante);
+        if(pl===res.local&&pv===res.visitante){ex++;return;}
+        const ok=(res.local>res.visitante&&pl>pv)||(res.visitante>res.local&&pv>pl)||(res.local===res.visitante&&pl===pv);
+        if(ok) co++; else fa++;
       });
       batch.update(db.collection('usuarios').doc(uid),{puntos:puntos,aciertos:aciertos,stExactos:ex,stCorrectos:co,stFallas:fa,stHechos:he});
     }
@@ -1658,6 +1665,6 @@ function toast(msg,type='ok'){
   clearTimeout(window._tt); window._tt=setTimeout(()=>t.classList.remove('show'),3500);
 }
 </script>
-<div style="text-align:center;padding:.5rem;font-size:.55rem;color:#bbb;letter-spacing:1px">v2.6</div>
+<div style="text-align:center;padding:.5rem;font-size:.55rem;color:#bbb;letter-spacing:1px">v2.7</div>
 </body>
 </html>
