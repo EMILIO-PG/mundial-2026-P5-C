@@ -1256,10 +1256,11 @@ async function recalcularTotales(users){
       parts.forEach(d=>{ const x=d.data();
         if(x.local===undefined||x.visitante===undefined) return;
         he++;
-        puntos+=(x.pts||0); if(x.acierto) aciertos++;
-        // Clasificar contra el resultado oficial (funciona con pronósticos viejos y nuevos)
+        // Anti-trampa: solo se suman puntos de partidos con resultado OFICIAL finalizado.
+        // Un campo pts inyectado en un pronóstico de un partido futuro vale cero.
         const res=resultados[d.id];
         if(!res||!res.finalizado) return;
+        puntos+=(x.pts||0); if(x.acierto) aciertos++;
         const pl=parseInt(x.local), pv=parseInt(x.visitante);
         if(pl===res.local&&pv===res.visitante){ex++;return;}
         const ok=(res.local>res.visitante&&pl>pv)||(res.visitante>res.local&&pv>pl)||(res.local===res.visitante&&pl===pv);
@@ -1781,6 +1782,6 @@ setInterval(() => {
   }
 }, 30000);
 </script>
-<div style="text-align:center;padding:.5rem;font-size:.55rem;color:#bbb;letter-spacing:1px">v2.8</div>
+<div style="text-align:center;padding:.5rem;font-size:.55rem;color:#bbb;letter-spacing:1px">v2.9</div>
 </body>
 </html>
