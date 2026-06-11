@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"/>
 <title>Contraloría · Mundial 2026</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -147,13 +147,13 @@ html,body{overflow-x:hidden;max-width:100%}
 
 /* ── PARTIDO CARDS (2 columnas) ────────────────── */
 .partidos-2col{display:grid;grid-template-columns:1fr 1fr;gap:0}
-@media(max-width:700px){.partidos-2col{grid-template-columns:1fr}}
+.partidos-2col>*{min-width:0}
+@media(max-width:768px){.partidos-2col{grid-template-columns:1fr}}
 /* Cards de partido en GRUPOS: con aire entre ellas, no pegadas */
 #g-detail .partidos-2col{gap:.85rem}
 #g-detail .partidos-2col .pc{margin:0;border:1px solid var(--ln)}
-@media(max-width:700px){#g-detail .partidos-2col{gap:.85rem}}
 
-.pc{background:var(--w);border:1px solid var(--ln);margin-bottom:-1px;margin-right:-1px}
+.pc{background:var(--w);border:1px solid var(--ln);margin-bottom:-1px;margin-right:-1px;max-width:100%;overflow:hidden}
 .pc-head{padding:.55rem 1rem;background:var(--g1);border-bottom:1px solid var(--ln);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.25rem}
 .pc-grp{font-size:.6rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--g3)}
 .pc-bb{display:flex;align-items:center;gap:.3rem;flex-wrap:wrap}
@@ -187,11 +187,13 @@ html,body{overflow-x:hidden;max-width:100%}
 /* ── ANÁLISIS COLAPSABLE ───────────────────────── */
 .ctx-btn{width:100%;margin-top:.65rem;padding:.4rem .65rem;background:var(--bg);border:1px solid var(--ln);font-size:.58rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;font-family:'Inter',sans-serif;color:var(--g4);display:flex;align-items:center;justify-content:space-between;transition:.15s}
 .ctx-btn:hover{background:var(--g1)}
-.ctx-panel{display:none;border:1px solid var(--ln);border-top:none;padding:.75rem .85rem;background:var(--bg)}
+.ctx-panel{display:none;border:1px solid var(--ln);border-top:none;padding:.75rem .85rem;background:var(--bg);overflow-wrap:break-word;word-break:break-word}
 .ctx-panel.open{display:block}
 .ctx-contexto{font-size:.75rem;color:var(--g4);line-height:1.6;margin-bottom:.65rem;padding-bottom:.65rem;border-bottom:1px solid var(--ln)}
 .ctx-contexto strong{color:var(--k)}
 .ctx-jgrid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.6rem}
+.ctx-jgrid>*{min-width:0}
+@media(max-width:768px){.ctx-jgrid{grid-template-columns:1fr}}
 .ctx-j{border:1px solid var(--ln);padding:.55rem .65rem;background:var(--w)}
 .ctx-jlbl{font-size:.52rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--g3);margin-bottom:.4rem}
 .ctx-jrow{display:flex;align-items:center;gap:.4rem;margin-bottom:.3rem}
@@ -355,6 +357,11 @@ html,body{overflow-x:hidden;max-width:100%}
 .sim-grupos{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;margin-bottom:1.5rem}
 .sim-reset{background:var(--w);border:1px solid var(--ln);color:var(--g4);font-size:.58rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:.4rem .7rem;cursor:pointer;font-family:'Inter',sans-serif;transition:.15s;flex-shrink:0}
 .sim-reset:hover{border-color:var(--er);color:var(--er)}
+.sync-btn{background:var(--p);border:none;color:#fff;font-size:.66rem;font-weight:800;letter-spacing:1px;text-transform:uppercase;padding:.75rem 1.1rem;cursor:pointer;font-family:'Inter',sans-serif;transition:.15s;width:100%}
+.sync-btn:hover{background:var(--p2)}
+.sync-hint{font-size:.62rem;color:var(--g3);margin-top:.4rem;line-height:1.4}
+.pron-aviso{font-size:.58rem;color:var(--g3);text-align:center;margin-top:.5rem;letter-spacing:.3px}
+.pron-aviso.cerrado{color:var(--er);font-weight:700}
 @media(max-width:700px){.sim-grupos{grid-template-columns:repeat(2,1fr)}}
 .sim-g{background:var(--w);border:1px solid var(--ln)}
 .sim-g-head{background:var(--k);padding:.4rem .6rem;font-size:.58rem;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#fff}
@@ -377,8 +384,9 @@ html,body{overflow-x:hidden;max-width:100%}
 
 /* inicio partidos - full width 2 cols */
 #inicio-parts{display:grid;grid-template-columns:1fr 1fr;gap:0}
+#inicio-parts>*{min-width:0}
 #inicio-parts .pc{margin-right:-1px;margin-bottom:-1px}
-@media(max-width:700px){#inicio-parts{grid-template-columns:1fr}}
+@media(max-width:768px){#inicio-parts{grid-template-columns:1fr}}
 
 /* ── API STATUS ────────────────────────────────── */
 .api-status{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;background:var(--w);border:1px solid var(--ln);margin-bottom:1rem;font-size:.68rem;color:var(--g4)}
@@ -416,6 +424,12 @@ html,body{overflow-x:hidden;max-width:100%}
 @media(max-width:420px){
   .grupos-tabs-wrap{grid-template-columns:repeat(3,1fr)}
   .brand-text{font-size:.55rem;letter-spacing:.5px}
+}
+/* iOS: inputs con letra <16px disparan auto-zoom que deja la página pegada con zoom */
+@media(max-width:768px){
+  .fg input{font-size:16px}
+  .ai{font-size:16px;width:46px}
+  .pi{font-size:1.4rem}
 }
 </style>
 </head>
@@ -581,6 +595,10 @@ html,body{overflow-x:hidden;max-width:100%}
 
     <!-- ══ HOY ══ -->
     <div class="sec" id="s-hoy">
+      <div id="admin-sync" style="display:none;margin-bottom:1rem">
+        <button class="sync-btn" type="button" onclick="sincronizarResultados()">🔄 Sincronizar resultados desde la API</button>
+        <div class="sync-hint">Trae solo partidos finalizados. Te muestra la lista y tú confirmas antes de guardar.</div>
+      </div>
       <div id="hoy-content"></div>
     </div>
 
@@ -653,6 +671,26 @@ html,body{overflow-x:hidden;max-width:100%}
 <script>
 const API_KEY = '2a602115ff3848279affcda63e887a72';
 const WC2026_ID = 2000; // football-data.org competition ID para Mundial 2026
+// ── Diccionario nombres app (español) → nombre EXACTO de la API ──
+// Claves normalizadas (sin tildes, minúsculas) para emparejar a prueba de balas
+const API_NAMES={
+  'mexico':'Mexico','sudafrica':'South Africa','corea del sur':'South Korea','republica checa':'Czechia',
+  'canada':'Canada','bosnia-herzegovina':'Bosnia-Herzegovina','bosnia herzegovina':'Bosnia-Herzegovina',
+  'qatar':'Qatar','catar':'Qatar','suiza':'Switzerland',
+  'brasil':'Brazil','marruecos':'Morocco','haiti':'Haiti','escocia':'Scotland',
+  'turquia':'Turkey','estados unidos':'United States','paraguay':'Paraguay','australia':'Australia',
+  'alemania':'Germany','curazao':'Curaçao','curacao':'Curaçao','costa de marfil':'Ivory Coast','ecuador':'Ecuador',
+  'suecia':'Sweden','paises bajos':'Netherlands','holanda':'Netherlands','japon':'Japan','tunez':'Tunisia',
+  'belgica':'Belgium','egipto':'Egypt','iran':'Iran','nueva zelanda':'New Zealand',
+  'espana':'Spain','cabo verde':'Cape Verde Islands','arabia saudita':'Saudi Arabia','arabia saudi':'Saudi Arabia',
+  'uruguay':'Uruguay','irak':'Iraq','iraq':'Iraq','francia':'France','senegal':'Senegal','noruega':'Norway',
+  'argentina':'Argentina','argelia':'Algeria','austria':'Austria','jordania':'Jordan',
+  'rd congo':'Congo DR','congo':'Congo DR','republica democratica del congo':'Congo DR',
+  'portugal':'Portugal','uzbekistan':'Uzbekistan','colombia':'Colombia',
+  'inglaterra':'England','croacia':'Croatia','ghana':'Ghana','panama':'Panama'
+};
+function normNom(s){return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();}
+function apiName(appName){return API_NAMES[normNom(appName)]||null;}
 
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
@@ -707,6 +745,7 @@ async function loadUD(){
   const n=CUD?.nombre||CU.email.split('@')[0];
   document.getElementById('top-name').textContent=n;
   document.getElementById('top-av').textContent=n.charAt(0).toUpperCase();
+  const sy=document.getElementById('admin-sync'); if(sy) sy.style.display=isAdmin?'block':'none';
 }
 
 // ── SLIDER ───────────────────────────────────────
@@ -862,7 +901,9 @@ function partidoCard(p){
       <span class="psep">—</span>
       <input class="pi pi-v${piC}" type="number" min="0" max="20" value="${pV}" ${bloq?'disabled':''} placeholder="-"/>
     </div>`;
-  if(!bloq) pronHTML+=`<button class="pbtn${btnC}" onclick="guardar(this,'${p.id}','${p.local}','${p.visitante}')">Guardar pronóstico</button>`;
+  if(!bloq) pronHTML+=`<button class="pbtn${btnC}" onclick="guardar(this,'${p.id}','${p.local}','${p.visitante}')">Guardar pronóstico</button>
+    <div class="pron-aviso">✏️ Editable hasta el inicio del partido</div>`;
+  else pronHTML+=`<div class="pron-aviso cerrado">🔒 Pronóstico cerrado — el partido ya comenzó</div>`;
   if(pr?.guardado){
     pronHTML+=`<div class="pfeed">✓ Guardado: ${pr.local}–${pr.visitante}`;
     if(pts!==null) pronHTML+=` &nbsp;<span class="badge b-pts">+${pts} pts</span>`;
@@ -918,6 +959,12 @@ function toggleCtx(btn){
 
 // ── GUARDAR PRONÓSTICO ────────────────────────────
 async function guardar(btn,pid,local,vis){
+  // Doble validación: aunque la página esté abierta desde antes, verificar la hora AHORA
+  const part=PARTIDOS_GRUPOS.find(x=>x.id===pid);
+  if(part){
+    const dt=new Date(part.fecha+'T'+part.hora+':00-05:00');
+    if(dt<=new Date()){toast('🔒 El partido ya comenzó. Pronóstico cerrado.','err');renderHoy();renderGrupos();renderCalendario();return;}
+  }
   // Lee los inputs DENTRO de la card del botón clickeado — así funciona aunque
   // el mismo partido aparezca en Inicio, Grupos, Calendario y Hoy a la vez
   const card=btn.closest('.pc');
@@ -959,20 +1006,54 @@ async function buscarResultadoAPI(pid, localNom, visNom){
     });
     if(!res.ok){toast('Error de API: '+res.status,'err');return;}
     const data=await res.json();
-    const match=data.matches?.find(m=>{
-      const hn=m.homeTeam?.name||'', an=m.awayTeam?.name||'';
-      return (hn.includes(localNom.split(' ')[0])||localNom.includes(hn.split(' ')[0])) &&
-             (an.includes(visNom.split(' ')[0])||visNom.includes(an.split(' ')[0]));
-    });
+    const an=apiName(localNom), bn=apiName(visNom);
+    if(!an||!bn){toast('Equipo no mapeado en el diccionario API.','err');return;}
+    const match=data.matches?.find(m=>m.homeTeam?.name===an && m.awayTeam?.name===bn);
     if(!match){toast('Partido no encontrado en la API.','err');return;}
     if(match.status!=='FINISHED'){toast('El partido aún no ha finalizado según la API.','info');return;}
     const s=match.score?.fullTime;
-    if(!s){toast('Marcador no disponible aún.','err');return;}
+    if(!s||s.home===null||s.away===null){toast('Marcador no disponible aún.','err');return;}
     // Prellenar los campos admin
     const adl=document.getElementById('adl-'+pid), adv=document.getElementById('adv-'+pid);
     if(adl) adl.value=s.home; if(adv) adv.value=s.away;
     toast(`API: ${localNom} ${s.home} - ${s.away} ${visNom}. Revisa y guarda.`,'ok');
   }catch(e){toast('Error de conexión con la API.','err');}
+}
+
+// ── SINCRONIZAR TODOS LOS RESULTADOS (1 llamada, solo FINISHED, con confirmación) ──
+async function sincronizarResultados(){
+  if(!isAdmin){toast('Solo el admin puede sincronizar.','err');return;}
+  toast('Consultando la API...','info');
+  try{
+    const res=await fetch(`https://api.football-data.org/v4/competitions/${WC2026_ID}/matches`,{
+      headers:{'X-Auth-Token':API_KEY}
+    });
+    if(!res.ok){toast('Error de API: '+res.status,'err');return;}
+    const data=await res.json();
+    const fin=(data.matches||[]).filter(m=>m.status==='FINISHED'&&m.score?.fullTime&&m.score.fullTime.home!==null);
+    // Emparejar SOLO partidos de la app que aún no tienen resultado guardado
+    const nuevos=[];
+    PARTIDOS_GRUPOS.forEach(p=>{
+      if(resultados[p.id]&&resultados[p.id].finalizado) return; // ya guardado, no tocar
+      const an=apiName(p.local), bn=apiName(p.visitante);
+      if(!an||!bn) return;
+      const m=fin.find(x=>x.homeTeam?.name===an&&x.awayTeam?.name===bn);
+      if(m) nuevos.push({p, home:m.score.fullTime.home, away:m.score.fullTime.away});
+    });
+    if(!nuevos.length){toast('No hay partidos finalizados nuevos. Todo al día. ✅','ok');return;}
+    // Mostrar lista para que el admin confirme antes de guardar
+    const lista=nuevos.map(x=>`• ${x.p.local} ${x.home} - ${x.away} ${x.p.visitante}`).join('\n');
+    if(!confirm(`La API trae ${nuevos.length} resultado(s) finalizado(s):\n\n${lista}\n\n¿Confirmar y guardar TODOS? (Se repartirán los puntos)`)) return;
+    toast('Guardando resultados y repartiendo puntos...','info');
+    for(const x of nuevos){
+      const d={local:x.home,visitante:x.away,finalizado:true,ts:firebase.firestore.FieldValue.serverTimestamp()};
+      await db.collection('resultados').doc(x.p.id).set(d);
+      resultados[x.p.id]={local:x.home,visitante:x.away,finalizado:true};
+      await calcPtsTodos(x.p.id);
+    }
+    toast(`${nuevos.length} resultado(s) guardado(s) y puntos repartidos. ✅`,'ok');
+    updateTopPts(); renderInicio(); renderHoy(); renderGrupos(); renderCalendario(); renderRanking&&renderRanking();
+  }catch(e){console.error(e);toast('Error de conexión con la API.','err');}
 }
 
 async function calcPtsTodos(pid){
