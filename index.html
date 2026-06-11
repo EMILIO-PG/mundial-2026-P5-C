@@ -759,6 +759,20 @@ let CU=null, CUD=null, isAdmin=false, misP={}, resultados={}, simClas={};
 let simWin={}, ffWin={}; // ganadores elegidos en el bracket (sim / fase final): {matchId: nombreEquipo}
 let bkMobRound={sim:0, ff:0}; // ronda activa en la vista móvil del bracket
 let grupoActivo='A', calDiaActivo='';
+// ── HORA DEL SERVIDOR (inmune a cambio de fecha en el dispositivo) ──
+let SERVER_NOW=null, SERVER_NOW_LOADED_AT=null;
+function ahoraReal(){
+  if(!SERVER_NOW||!SERVER_NOW_LOADED_AT) return null;
+  return new Date(SERVER_NOW.getTime()+(Date.now()-SERVER_NOW_LOADED_AT));
+}
+async function loadServerTime(){
+  try{
+    await db.collection('_clock').doc('now').set({t:firebase.firestore.FieldValue.serverTimestamp()});
+    const doc=await db.collection('_clock').doc('now').get();
+    SERVER_NOW=doc.data().t.toDate();
+    SERVER_NOW_LOADED_AT=Date.now();
+  }catch(e){ SERVER_NOW=null; SERVER_NOW_LOADED_AT=null; }
+}
 
 // ── AUTH ────────────────────────────────────────────
 auth.onAuthStateChanged(async u=>{
@@ -823,7 +837,7 @@ function goSlide(i){
 // ── INIT ─────────────────────────────────────────
 async function initApp(){
   initSlider();
-  await Promise.all([loadResultados(), loadMisP(), loadFFBracket()]);
+  await Promise.all([loadServerTime(), loadResultados(), loadMisP(), loadFFBracket()]);
   actualizarMiContador(); // backfill: deja mi contador al día apenas entro
   updateTopPts();
   renderInicio(); renderHoy(); renderGrupos(); renderCalendario(); renderFaseFinal(); renderSimulador();
@@ -871,12 +885,14 @@ function goTo(sec){
 function flag(p){ const c=BANDERAS[p]; return c?`<img class="flag" src="https://flagcdn.com/w80/${c}.png" alt="${p}" onerror="this.style.opacity=.3"/>`:''; }
 function gflag(p){ const c=BANDERAS[p]; return c?`<img class="gf" src="https://flagcdn.com/w40/${c}.png" alt="${p}" onerror="this.style.display='none'"/>`:''; }
 function sflag(p){ const c=BANDERAS[p]; return c?`<img style="width:14px;height:10px;object-fit:cover;border:1px solid var(--ln);vertical-align:middle" src="https://flagcdn.com/w40/${c}.png" alt="${p}" onerror="this.style.display='none'"/>`:''; }
-function hoy(){ return new Date().toISOString().split('T')[0]; }
+function hoy(){ const ahora=ahoraReal(); if(!ahora) return '9999-12-31'; return ahora.toISOString().split('T')[0]; }
 function estadoP(p){
   const r=resultados[p.id]; if(r&&r.finalizado) return 'fin';
+  const ahora=ahoraReal();
+  if(!ahora) return 'fin'; // sin hora del servidor → bloquear por seguridad
   const dt=new Date(p.fecha+'T'+p.hora+':00-05:00');
-  if(dt<=new Date()) return 'pasado';
-  if(p.fecha===hoy()) return 'hoy';
+  if(dt<=ahora) return 'pasado';
+  if(p.fecha===ahora.toISOString().split('T')[0]) return 'hoy';
   return 'futuro';
 }
 function calcPts(pid,local,vis){
@@ -1030,7 +1046,7 @@ function toggleCtx(btn){
 
 // ── GUARDAR PRONÓSTICO ────────────────────────────
 async function guardar(btn,pid,local,vis){
-  // Validación con hora del SERVIDOR de Firestore — inmune a cambios de hora en el laptop
+  // Validación con hora del SERVIDOR de Firestore — inmune a cambios de hora en el dispositivo
   const part=PARTIDOS_GRUPOS.find(x=>x.id===pid);
   if(part){
     const dt=new Date(part.fecha+'T'+part.hora+':00-05:00');
@@ -1038,10 +1054,13 @@ async function guardar(btn,pid,local,vis){
       await db.collection('_clock').doc('now').set({t:firebase.firestore.FieldValue.serverTimestamp()});
       const clockDoc=await db.collection('_clock').doc('now').get();
       const serverNow=clockDoc.data().t.toDate();
+      // Actualizar SERVER_NOW con la verificación más reciente
+      SERVER_NOW=serverNow; SERVER_NOW_LOADED_AT=Date.now();
       if(dt<=serverNow){toast('🔒 El partido ya comenzó. Pronóstico cerrado.','err');renderHoy();renderGrupos();renderCalendario();return;}
     }catch(e){
-      // Fallback: si falla la consulta al servidor, usar hora local
-      if(dt<=new Date()){toast('🔒 El partido ya comenzó. Pronóstico cerrado.','err');renderHoy();renderGrupos();renderCalendario();return;}
+      // Si no se puede verificar con el servidor, bloquear — nunca confiar en la hora del dispositivo
+      toast('⚠️ No se pudo verificar la hora del servidor. Revisa tu conexión e intenta de nuevo.','err');
+      return;
     }
   }
   // Lee los inputs DENTRO de la card del botón clickeado — así funciona aunque
@@ -1466,7 +1485,7 @@ function scrollCal(dir){
 
 // ── FASE FINAL ────────────────────────────────────
 function renderFaseFinal(){
-  const inicio=new Date('2026-06-28T00:00:00-05:00'), ahora=new Date();
+  const inicio=new Date('2026-06-28T00:00:00-05:00'), ahora=ahoraReal()||new Date();
   const cdEl=document.getElementById('ff-cd');
   if(cdEl){ if(ahora<inicio){ const dias=Math.ceil((inicio-ahora)/(1000*60*60*24)); cdEl.textContent=`⏳ Faltan ${dias} días para que se definan los cruces`; } else cdEl.textContent='⚽ Los cruces ya están definidos'; }
   const c=Object.keys(ffWin).length;
@@ -1724,7 +1743,8 @@ function toast(msg,type='ok'){
 // Re-renderiza cada 30s para cerrar pronósticos de partidos que ya comenzaron.
 // Doble protección: visual (inputs disabled) + lógica (validación en guardar()).
 setInterval(() => {
-  const ahora = new Date();
+  const ahora = ahoraReal();
+  if(!ahora) return;
   const hayQueActualizar = PARTIDOS_GRUPOS.some(p => {
     const dt = new Date(p.fecha + 'T' + p.hora + ':00-05:00');
     return dt <= ahora && dt > new Date(ahora - 35000);
