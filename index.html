@@ -782,6 +782,20 @@ async function loadServerTime(){
   }catch(e){ console.warn('_clock read:',e?.code||e); SERVER_NOW=null; SERVER_NOW_LOADED_AT=null; }
 }
 
+// ── CACHÉ DE USUARIOS (reduce lecturas de Firestore) ──
+// En lugar de releer toda la colección 'usuarios' en cada ranking/perfil,
+// la leemos UNA vez y la reusamos por 60s. force=true la refresca (tras recálculo admin).
+let _usuariosCache=null, _usuariosCacheAt=0;
+async function getUsuarios(force){
+  const ahora=Date.now();
+  if(!force && _usuariosCache && (ahora-_usuariosCacheAt)<60000) return _usuariosCache;
+  const snap=await db.collection('usuarios').orderBy('puntos','desc').get();
+  _usuariosCache=snap.docs.map(d=>({id:d.id,...d.data()}));
+  _usuariosCacheAt=ahora;
+  return _usuariosCache;
+}
+function invalidarUsuarios(){ _usuariosCache=null; _usuariosCacheAt=0; }
+
 // ── AUTH ────────────────────────────────────────────
 auth.onAuthStateChanged(async u=>{
   if(u){
@@ -1077,18 +1091,20 @@ async function guardar(btn,pid,local,vis){
   const part=PARTIDOS_GRUPOS.find(x=>x.id===pid);
   if(part){
     const dt=new Date(part.fecha+'T'+part.hora+':00-05:00');
-    try{
-      await db.collection('_clock').doc('now').set({t:firebase.firestore.FieldValue.serverTimestamp()});
-      const clockDoc=await db.collection('_clock').doc('now').get();
-      const serverNow=clockDoc.data().t.toDate();
-      // Actualizar SERVER_NOW con la verificación más reciente
-      SERVER_NOW=serverNow; SERVER_NOW_LOADED_AT=Date.now();
-      if(dt<=serverNow){toast('🔒 El partido ya comenzó. Pronóstico cerrado.','err');renderHoy();renderGrupos();renderCalendario();return;}
-    }catch(e){
-      // Si no se puede verificar con el servidor, bloquear — nunca confiar en la hora del dispositivo
+    // Usamos la hora del servidor ya cargada (offset local), sin releer _clock cada vez.
+    // Solo si el reloj no está cargado, lo pedimos una vez como respaldo.
+    let serverNow=ahoraReal();
+    if(!serverNow){
+      try{
+        await loadServerTime();
+        serverNow=ahoraReal();
+      }catch(e){}
+    }
+    if(!serverNow){
       toast('⚠️ No se pudo verificar la hora del servidor. Revisa tu conexión e intenta de nuevo.','err');
       return;
     }
+    if(dt<=serverNow){toast('🔒 El partido ya comenzó. Pronóstico cerrado.','err');renderHoy();renderGrupos();renderCalendario();return;}
   }
   // Lee los inputs DENTRO de la card del botón clickeado — así funciona aunque
   // el mismo partido aparezca en Inicio, Grupos, Calendario y Hoy a la vez
@@ -1269,6 +1285,7 @@ async function recalcularTotales(users){
       batch.update(db.collection('usuarios').doc(uid),{puntos:puntos,aciertos:aciertos,stExactos:ex,stCorrectos:co,stFallas:fa,stHechos:he});
     }
     await batch.commit();
+    invalidarUsuarios(); // los puntos cambiaron: forzar relectura en el próximo ranking
   }catch(e){console.error('Error recalc totales:',e);}
 }
 
@@ -1287,9 +1304,9 @@ async function renderInicioCarnet(){
   const st=misStatsLive();
   let puesto=null, total=null;
   try{
-    const snap=await db.collection('usuarios').orderBy('puntos','desc').get();
-    total=snap.size; let pos=1;
-    snap.forEach(d=>{ if(d.id===CU.uid) puesto=pos; pos++; });
+    const lista=await getUsuarios();
+    total=lista.length; let pos=1;
+    lista.forEach(u=>{ if(u.id===CU.uid) puesto=pos; pos++; });
   }catch(e){}
   el.innerHTML=carnetHTML({nombre:CUD?.nombre||CU.email.split('@')[0], puntos:CUD?.puntos||0, puesto, total, ...st});
 }
@@ -1341,9 +1358,9 @@ async function renderPerfil(){
   const st=misStatsLive();
   let puesto=null, total=null;
   try{
-    const snap=await db.collection('usuarios').orderBy('puntos','desc').get();
-    total=snap.size; let pos=1;
-    snap.forEach(d=>{ if(d.id===CU.uid) puesto=pos; pos++; });
+    const lista=await getUsuarios();
+    total=lista.length; let pos=1;
+    lista.forEach(u=>{ if(u.id===CU.uid) puesto=pos; pos++; });
   }catch(e){}
   el.innerHTML=carnetHTML({nombre:CUD?.nombre||CU.email.split('@')[0], puntos:CUD?.puntos||0, puesto, total, ...st});
 }
@@ -1355,9 +1372,9 @@ async function verPerfil(uid){
   mc.innerHTML='<p style="color:var(--g3);font-size:.75rem;padding:1rem">Cargando...</p>';
   ov.classList.add('show');
   try{
-    const snap=await db.collection('usuarios').orderBy('puntos','desc').get();
-    let puesto=null, total=snap.size, pos=1, u=null;
-    snap.forEach(d=>{ if(d.id===uid){puesto=pos;u=d.data();} pos++; });
+    const lista=await getUsuarios();
+    let puesto=null, total=lista.length, pos=1, u=null;
+    lista.forEach(d=>{ if(d.id===uid){puesto=pos;u=d;} pos++; });
     if(!u){mc.innerHTML='<p style="color:var(--er);font-size:.75rem;padding:1rem">Jugador no encontrado.</p>';return;}
     mc.innerHTML=carnetHTML({nombre:u.nombre||u.email, puntos:u.puntos||0, puesto, total,
       exactos:u.stExactos||0, correctos:u.stCorrectos||0, fallas:u.stFallas||0, hechos:u.stHechos||0});
@@ -1368,13 +1385,14 @@ function cerrarPerfil(){document.getElementById('pf-overlay').classList.remove('
 async function renderInicioRank(){
   const el=document.getElementById('inicio-rank');
   try{
-    const snap=await db.collection('usuarios').orderBy('puntos','desc').limit(5).get();
-    if(snap.empty){el.innerHTML='<p style="color:var(--g3);font-size:.75rem">Aún no hay jugadores registrados.</p>';return;}
+    const lista=await getUsuarios();
+    const top=lista.slice(0,5);
+    if(top.length===0){el.innerHTML='<p style="color:var(--g3);font-size:.75rem">Aún no hay jugadores registrados.</p>';return;}
     let h=`<div class="rhead"><h3>Tabla de líderes</h3></div>`;
     let pos=1;
-    snap.forEach(d=>{
-      const u=d.data(), me=d.id===CU.uid;
-      h+=`<div class="rrow${me?' me':''}" onclick="verPerfil('${d.id}')" style="cursor:pointer"><span class="rpos">${pos===1?'🥇':pos===2?'🥈':pos===3?'🥉':pos}</span>
+    top.forEach(u=>{
+      const me=u.id===CU.uid;
+      h+=`<div class="rrow${me?' me':''}" onclick="verPerfil('${u.id}')" style="cursor:pointer"><span class="rpos">${pos===1?'🥇':pos===2?'🥈':pos===3?'🥉':pos}</span>
         <div class="rav${me?' p':''}">${(u.nombre||'?').charAt(0).toUpperCase()}</div>
         <div style="flex:1"><div class="rname">${u.nombre||u.email}${me?'<span class="rme-tag">(tú)</span>':''}</div><div class="rsub">${u.aciertos||0} aciertos</div></div>
         <span class="rpts">${u.puntos||0}</span></div>`;
@@ -1744,13 +1762,14 @@ async function renderRanking(){
   const cont=document.getElementById('ranking-content');
   cont.innerHTML='<div class="loading"><div class="spin"></div></div>';
   try{
-    const snap=await db.collection('usuarios').orderBy('puntos','desc').limit(50).get();
-    if(snap.empty){cont.innerHTML='<div class="empty-state">Aún no hay jugadores registrados.</div>';return;}
-    let h=`<div class="rhead"><h3>Tabla de líderes — Contraloría Mundial 2026</h3><span>${snap.size} jugadores</span></div>`;
+    const lista=await getUsuarios();
+    const top=lista.slice(0,50);
+    if(top.length===0){cont.innerHTML='<div class="empty-state">Aún no hay jugadores registrados.</div>';return;}
+    let h=`<div class="rhead"><h3>Tabla de líderes — Contraloría Mundial 2026</h3><span>${top.length} jugadores</span></div>`;
     let pos=1;
-    snap.forEach(d=>{
-      const u=d.data(), me=d.id===CU.uid;
-      h+=`<div class="rrow${me?' me':''}" onclick="verPerfil('${d.id}')" style="cursor:pointer"><span class="rpos">${pos===1?'🥇':pos===2?'🥈':pos===3?'🥉':pos}</span>
+    top.forEach(u=>{
+      const me=u.id===CU.uid;
+      h+=`<div class="rrow${me?' me':''}" onclick="verPerfil('${u.id}')" style="cursor:pointer"><span class="rpos">${pos===1?'🥇':pos===2?'🥈':pos===3?'🥉':pos}</span>
         <div class="rav${me?' p':''}">${(u.nombre||'?').charAt(0).toUpperCase()}</div>
         <div style="flex:1"><div class="rname">${u.nombre||u.email}${me?'<span class="rme-tag">(tú)</span>':''}</div><div class="rsub">${u.aciertos||0} aciertos</div></div>
         <span class="rpts">${u.puntos||0}</span></div>`;
