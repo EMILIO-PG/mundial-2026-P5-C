@@ -73,10 +73,10 @@ const PARTIDOS_GRUPOS = [
   // ── GRUPO F ──────────────────────────────────────
   {id:"F1J1", grupo:"F", fecha:"2026-06-14", hora:"15:00", local:"Países Bajos",    visitante:"Japón",            jornada:1, sede:"Arlington"},
   {id:"F2J1", grupo:"F", fecha:"2026-06-14", hora:"21:00", local:"Suecia",          visitante:"Túnez",            jornada:1, sede:"Guadalajara"},
-  {id:"F1J2", grupo:"F", fecha:"2026-06-20", hora:"23:00", local:"Japón",           visitante:"Suecia",           jornada:2, sede:"Guadalajara"},
-  {id:"F2J2", grupo:"F", fecha:"2026-06-20", hora:"12:00", local:"Países Bajos",    visitante:"Túnez",            jornada:2, sede:"Houston"},
-  {id:"F1J3", grupo:"F", fecha:"2026-06-25", hora:"18:00", local:"Túnez",           visitante:"Japón",            jornada:3, sede:"Guadalajara"},
-  {id:"F2J3", grupo:"F", fecha:"2026-06-25", hora:"18:00", local:"Suecia",          visitante:"Países Bajos",     jornada:3, sede:"Arlington"},
+  {id:"F1J2", grupo:"F", fecha:"2026-06-20", hora:"23:00", local:"Japón",           visitante:"Túnez",            jornada:2, sede:"Guadalajara"},
+  {id:"F2J2", grupo:"F", fecha:"2026-06-20", hora:"12:00", local:"Países Bajos",    visitante:"Suecia",           jornada:2, sede:"Houston"},
+  {id:"F1J3", grupo:"F", fecha:"2026-06-25", hora:"18:00", local:"Túnez",           visitante:"Países Bajos",     jornada:3, sede:"Guadalajara"},
+  {id:"F2J3", grupo:"F", fecha:"2026-06-25", hora:"18:00", local:"Suecia",          visitante:"Japón",            jornada:3, sede:"Arlington"},
 
   // ── GRUPO G ──────────────────────────────────────
   {id:"G1J1", grupo:"G", fecha:"2026-06-15", hora:"14:00", local:"Bélgica",         visitante:"Egipto",           jornada:1, sede:"Seattle"},
