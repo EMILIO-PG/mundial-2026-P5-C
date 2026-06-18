@@ -1046,15 +1046,15 @@ function partidoCard(p){
     adminHTML=`<div class="admin-box">
       <div class="admin-title">⚙️ Admin — Resultado oficial</div>
       <div class="admin-row">
-        <input class="ai" id="adl-${p.id}" type="number" min="0" max="20" placeholder="L" value="${rv?r.local:''}"/>
+        <input class="ai ad-l" type="number" min="0" max="20" placeholder="L" value="${rv?r.local:''}"/>
         <span style="color:var(--g3);font-size:.7rem">–</span>
-        <input class="ai" id="adv-${p.id}" type="number" min="0" max="20" placeholder="V" value="${rv?r.visitante:''}"/>
-        <label class="admin-lbl"><input type="checkbox" id="adp-${p.id}" ${rv&&r.penales?'checked':''}/> Penales</label>
-        <input class="ai" id="adpl-${p.id}" type="number" min="0" max="20" placeholder="PL" style="width:36px" value="${rv&&r.penales?r.penalesLocal:''}"/>
+        <input class="ai ad-v" type="number" min="0" max="20" placeholder="V" value="${rv?r.visitante:''}"/>
+        <label class="admin-lbl"><input type="checkbox" class="ad-p" ${rv&&r.penales?'checked':''}/> Penales</label>
+        <input class="ai ad-pl" type="number" min="0" max="20" placeholder="PL" style="width:36px" value="${rv&&r.penales?r.penalesLocal:''}"/>
         <span style="color:var(--g3);font-size:.7rem">–</span>
-        <input class="ai" id="adpv-${p.id}" type="number" min="0" max="20" placeholder="PV" style="width:36px" value="${rv&&r.penales?r.penalesVisitante:''}"/>
-        <button class="admin-save" onclick="guardarRes('${p.id}')">Guardar</button>
-        <button class="api-btn" onclick="buscarResultadoAPI('${p.id}','${p.local}','${p.visitante}')">🔄 API</button>
+        <input class="ai ad-pv" type="number" min="0" max="20" placeholder="PV" style="width:36px" value="${rv&&r.penales?r.penalesVisitante:''}"/>
+        <button class="admin-save" onclick="guardarRes(this,'${p.id}')">Guardar</button>
+        <button class="api-btn" onclick="buscarResultadoAPI(this,'${p.id}','${p.local}','${p.visitante}')">🔄 API</button>
       </div>
     </div>`;
   }
@@ -1126,13 +1126,16 @@ async function guardar(btn,pid,local,vis){
 }
 
 // ── GUARDAR RESULTADO OFICIAL ─────────────────────
-async function guardarRes(pid){
-  const l=document.getElementById('adl-'+pid)?.value, v=document.getElementById('adv-'+pid)?.value;
+async function guardarRes(btn,pid){
+  // Lee los inputs DENTRO de la card del botón clickeado — evita el choque de ids
+  // cuando el mismo partido aparece en varias pestañas (Hoy, Grupos, Calendario) a la vez.
+  const card=btn.closest('.pc');
+  const l=card?.querySelector('.ad-l')?.value, v=card?.querySelector('.ad-v')?.value;
   if(l===''||l===undefined||v===''||v===undefined){toast('Ingresa el resultado completo.','err');return;}
-  const pen=document.getElementById('adp-'+pid)?.checked;
+  const pen=card?.querySelector('.ad-p')?.checked;
   const data={local:parseInt(l),visitante:parseInt(v),finalizado:true,penales:pen||false,
-    penalesLocal:pen?parseInt(document.getElementById('adpl-'+pid)?.value||0):null,
-    penalesVisitante:pen?parseInt(document.getElementById('adpv-'+pid)?.value||0):null,
+    penalesLocal:pen?parseInt(card?.querySelector('.ad-pl')?.value||0):null,
+    penalesVisitante:pen?parseInt(card?.querySelector('.ad-pv')?.value||0):null,
     ts:firebase.firestore.FieldValue.serverTimestamp()};
   try{
     await db.collection('resultados').doc(pid).set(data); resultados[pid]=data;
@@ -1142,7 +1145,7 @@ async function guardarRes(pid){
 }
 
 // ── API football-data.org ─────────────────────────
-async function buscarResultadoAPI(pid, localNom, visNom){
+async function buscarResultadoAPI(btn, pid, localNom, visNom){
   toast('Buscando resultado en la API...','info');
   let data;
   try{ data=await apiFetchMatches(); }
@@ -1155,8 +1158,9 @@ async function buscarResultadoAPI(pid, localNom, visNom){
     if(match.status!=='FINISHED'){toast('El partido aún no ha finalizado según la API.','info');return;}
     const s=match.score?.fullTime;
     if(!s||s.home===null||s.away===null){toast('Marcador no disponible aún.','err');return;}
-    // Prellenar los campos admin
-    const adl=document.getElementById('adl-'+pid), adv=document.getElementById('adv-'+pid);
+    // Prellenar los campos admin de la card del botón clickeado
+    const card=btn.closest('.pc');
+    const adl=card?.querySelector('.ad-l'), adv=card?.querySelector('.ad-v');
     if(adl) adl.value=s.home; if(adv) adv.value=s.away;
     toast(`API: ${localNom} ${s.home} - ${s.away} ${visNom}. Revisa y guarda.`,'ok');
   }catch(e){toast('Error procesando los datos de la API.','err');}
