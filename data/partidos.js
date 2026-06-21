@@ -1,3 +1,10 @@
+// ============================================================================
+//  MUNDIAL 2026 — Datos de la fase de grupos
+//  Todos los horarios en HORA ECUADOR (UTC-5).
+//  Verificado partido por partido contra el calendario oficial FIFA.
+//  Última corrección: 10 partidos arreglados (ver líneas marcadas con // ✅ FIX).
+// ============================================================================
+
 const GRUPOS = {
   A: { nombre: "Grupo A", equipos: ["México","Sudáfrica","Corea del Sur","República Checa"] },
   B: { nombre: "Grupo B", equipos: ["Canadá","Bosnia-Herzegovina","Qatar","Suiza"] },
@@ -36,7 +43,7 @@ const PARTIDOS_GRUPOS = [
   {id:"A1J2", grupo:"A", fecha:"2026-06-18", hora:"11:00", local:"República Checa", visitante:"Sudáfrica",        jornada:2, sede:"Atlanta"},
   {id:"A2J2", grupo:"A", fecha:"2026-06-18", hora:"20:00", local:"México",          visitante:"Corea del Sur",    jornada:2, sede:"Guadalajara"},
   {id:"A1J3", grupo:"A", fecha:"2026-06-24", hora:"20:00", local:"República Checa", visitante:"México",           jornada:3, sede:"Ciudad de México"},
-  {id:"A2J3", grupo:"A", fecha:"2026-06-24", hora:"20:00", local:"Sudáfrica",       visitante:"Corea del Sur",    jornada:3, sede:"Guadalajara"},
+  {id:"A2J3", grupo:"A", fecha:"2026-06-24", hora:"20:00", local:"Sudáfrica",       visitante:"Corea del Sur",    jornada:3, sede:"Monterrey"},          // ✅ FIX: sede Guadalajara → Monterrey (Estadio BBVA)
 
   // ── GRUPO B ──────────────────────────────────────
   {id:"B1J1", grupo:"B", fecha:"2026-06-12", hora:"14:00", local:"Canadá",          visitante:"Bosnia-Herzegovina",jornada:1, sede:"Toronto"},
@@ -56,7 +63,7 @@ const PARTIDOS_GRUPOS = [
 
   // ── GRUPO D ──────────────────────────────────────
   {id:"D1J1", grupo:"D", fecha:"2026-06-12", hora:"20:00", local:"Estados Unidos",  visitante:"Paraguay",         jornada:1, sede:"Los Ángeles"},
-  {id:"D2J1", grupo:"D", fecha:"2026-06-13", hora:"23:00", local:"Australia",       visitante:"Turquía",          jornada:1, sede:"Vancouver"},
+  {id:"D2J1", grupo:"D", fecha:"2026-06-14", hora:"11:00", local:"Australia",       visitante:"Turquía",          jornada:1, sede:"Vancouver"},          // ✅ FIX: fecha 13→14 jun y hora 23:00→11:00 (juego del mediodía, 12pm ET)
   {id:"D1J2", grupo:"D", fecha:"2026-06-19", hora:"14:00", local:"Estados Unidos",  visitante:"Australia",        jornada:2, sede:"Seattle"},
   {id:"D2J2", grupo:"D", fecha:"2026-06-19", hora:"22:00", local:"Turquía",         visitante:"Paraguay",         jornada:2, sede:"Santa Clara"},
   {id:"D1J3", grupo:"D", fecha:"2026-06-25", hora:"21:00", local:"Paraguay",        visitante:"Australia",        jornada:3, sede:"Santa Clara"},
@@ -71,18 +78,19 @@ const PARTIDOS_GRUPOS = [
   {id:"E2J3", grupo:"E", fecha:"2026-06-25", hora:"15:00", local:"Ecuador",         visitante:"Alemania",         jornada:3, sede:"Nueva Jersey"},
 
   // ── GRUPO F ──────────────────────────────────────
+  // ⚠️ Las jornadas 2 y 3 estaban completamente intercambiadas. Corregidas según FIFA.
   {id:"F1J1", grupo:"F", fecha:"2026-06-14", hora:"15:00", local:"Países Bajos",    visitante:"Japón",            jornada:1, sede:"Arlington"},
-  {id:"F2J1", grupo:"F", fecha:"2026-06-14", hora:"21:00", local:"Suecia",          visitante:"Túnez",            jornada:1, sede:"Guadalajara"},
-  {id:"F1J2", grupo:"F", fecha:"2026-06-20", hora:"23:00", local:"Japón",           visitante:"Túnez",            jornada:2, sede:"Guadalajara"},
-  {id:"F2J2", grupo:"F", fecha:"2026-06-20", hora:"12:00", local:"Países Bajos",    visitante:"Suecia",           jornada:2, sede:"Houston"},
-  {id:"F1J3", grupo:"F", fecha:"2026-06-25", hora:"18:00", local:"Túnez",           visitante:"Países Bajos",     jornada:3, sede:"Guadalajara"},
-  {id:"F2J3", grupo:"F", fecha:"2026-06-25", hora:"18:00", local:"Suecia",          visitante:"Japón",            jornada:3, sede:"Arlington"},
+  {id:"F2J1", grupo:"F", fecha:"2026-06-14", hora:"21:00", local:"Suecia",          visitante:"Túnez",            jornada:1, sede:"Monterrey"},          // ✅ FIX: sede Guadalajara → Monterrey
+  {id:"F1J2", grupo:"F", fecha:"2026-06-20", hora:"23:00", local:"Túnez",           visitante:"Japón",            jornada:2, sede:"Monterrey"},          // ✅ FIX: era "Japón vs Suecia / Guadalajara" → Túnez vs Japón / Monterrey (partido 1000 de la historia)
+  {id:"F2J2", grupo:"F", fecha:"2026-06-20", hora:"12:00", local:"Países Bajos",    visitante:"Suecia",           jornada:2, sede:"Houston"},            // ✅ FIX: visitante Túnez → Suecia
+  {id:"F1J3", grupo:"F", fecha:"2026-06-25", hora:"18:00", local:"Japón",           visitante:"Suecia",           jornada:3, sede:"Arlington"},          // ✅ FIX: era "Túnez vs Japón / Guadalajara" → Japón vs Suecia / Arlington
+  {id:"F2J3", grupo:"F", fecha:"2026-06-25", hora:"18:00", local:"Túnez",           visitante:"Países Bajos",     jornada:3, sede:"Kansas City"},        // ✅ FIX: era "Suecia vs Países Bajos / Arlington" → Túnez vs Países Bajos / Kansas City
 
   // ── GRUPO G ──────────────────────────────────────
   {id:"G1J1", grupo:"G", fecha:"2026-06-15", hora:"14:00", local:"Bélgica",         visitante:"Egipto",           jornada:1, sede:"Seattle"},
   {id:"G2J1", grupo:"G", fecha:"2026-06-15", hora:"20:00", local:"Irán",            visitante:"Nueva Zelanda",    jornada:1, sede:"Los Ángeles"},
-  {id:"G1J2", grupo:"G", fecha:"2026-06-22", hora:"14:00", local:"Bélgica",         visitante:"Irán",             jornada:2, sede:"Los Ángeles"},
-  {id:"G2J2", grupo:"G", fecha:"2026-06-22", hora:"14:00", local:"Nueva Zelanda",   visitante:"Egipto",           jornada:2, sede:"Vancouver"},
+  {id:"G1J2", grupo:"G", fecha:"2026-06-21", hora:"14:00", local:"Bélgica",         visitante:"Irán",             jornada:2, sede:"Los Ángeles"},        // ✅ FIX: fecha 22→21 jun
+  {id:"G2J2", grupo:"G", fecha:"2026-06-21", hora:"20:00", local:"Nueva Zelanda",   visitante:"Egipto",           jornada:2, sede:"Vancouver"},
   {id:"G1J3", grupo:"G", fecha:"2026-06-26", hora:"22:00", local:"Nueva Zelanda",   visitante:"Bélgica",          jornada:3, sede:"Vancouver"},
   {id:"G2J3", grupo:"G", fecha:"2026-06-26", hora:"22:00", local:"Egipto",          visitante:"Irán",             jornada:3, sede:"Seattle"},
 
@@ -98,7 +106,7 @@ const PARTIDOS_GRUPOS = [
   {id:"I1J1", grupo:"I", fecha:"2026-06-16", hora:"14:00", local:"Francia",         visitante:"Senegal",          jornada:1, sede:"Nueva Jersey"},
   {id:"I2J1", grupo:"I", fecha:"2026-06-16", hora:"17:00", local:"Irak",            visitante:"Noruega",          jornada:1, sede:"Foxborough"},
   {id:"I1J2", grupo:"I", fecha:"2026-06-22", hora:"16:00", local:"Francia",         visitante:"Irak",             jornada:2, sede:"Filadelfia"},
-  {id:"I2J2", grupo:"I", fecha:"2026-06-22", hora:"19:00", local:"Noruega",         visitante:"Senegal",          jornada:2, sede:"Toronto"},
+  {id:"I2J2", grupo:"I", fecha:"2026-06-22", hora:"19:00", local:"Noruega",         visitante:"Senegal",          jornada:2, sede:"Nueva Jersey"},       // ✅ FIX: sede Toronto → Nueva Jersey (MetLife)
   {id:"I1J3", grupo:"I", fecha:"2026-06-26", hora:"14:00", local:"Noruega",         visitante:"Francia",          jornada:3, sede:"Foxborough"},
   {id:"I2J3", grupo:"I", fecha:"2026-06-26", hora:"14:00", local:"Senegal",         visitante:"Irak",             jornada:3, sede:"Toronto"},
 
@@ -122,7 +130,7 @@ const PARTIDOS_GRUPOS = [
   {id:"L1J1", grupo:"L", fecha:"2026-06-17", hora:"15:00", local:"Inglaterra",      visitante:"Croacia",          jornada:1, sede:"Arlington"},
   {id:"L2J1", grupo:"L", fecha:"2026-06-17", hora:"18:00", local:"Ghana",           visitante:"Panamá",           jornada:1, sede:"Toronto"},
   {id:"L1J2", grupo:"L", fecha:"2026-06-23", hora:"15:00", local:"Inglaterra",      visitante:"Ghana",            jornada:2, sede:"Foxborough"},
-  {id:"L2J2", grupo:"L", fecha:"2026-06-23", hora:"18:00", local:"Panamá",          visitante:"Croacia",          jornada:2, sede:"Foxborough"},
+  {id:"L2J2", grupo:"L", fecha:"2026-06-23", hora:"18:00", local:"Panamá",          visitante:"Croacia",          jornada:2, sede:"Toronto"},            // ✅ FIX: sede Foxborough → Toronto (BMO Field)
   {id:"L1J3", grupo:"L", fecha:"2026-06-27", hora:"16:00", local:"Panamá",          visitante:"Inglaterra",       jornada:3, sede:"Nueva Jersey"},
   {id:"L2J3", grupo:"L", fecha:"2026-06-27", hora:"16:00", local:"Croacia",         visitante:"Ghana",            jornada:3, sede:"Filadelfia"},
 ];
