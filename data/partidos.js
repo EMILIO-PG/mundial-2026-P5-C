@@ -81,7 +81,7 @@ const PARTIDOS_GRUPOS = [
   // ── GRUPO G ──────────────────────────────────────
   {id:"G1J1", grupo:"G", fecha:"2026-06-15", hora:"14:00", local:"Bélgica",         visitante:"Egipto",           jornada:1, sede:"Seattle"},
   {id:"G2J1", grupo:"G", fecha:"2026-06-15", hora:"20:00", local:"Irán",            visitante:"Nueva Zelanda",    jornada:1, sede:"Los Ángeles"},
-  {id:"G1J2", grupo:"G", fecha:"2026-06-22", hora:"14:00", local:"Bélgica",         visitante:"Irán",             jornada:2, sede:"Los Ángeles"},
+  {id:"G1J2", grupo:"G", fecha:"2026-06-21", hora:"14:00", local:"Bélgica",         visitante:"Irán",             jornada:2, sede:"Los Ángeles"},
   {id:"G2J2", grupo:"G", fecha:"2026-06-21", hora:"20:00", local:"Nueva Zelanda",   visitante:"Egipto",           jornada:2, sede:"Vancouver"},
   {id:"G1J3", grupo:"G", fecha:"2026-06-26", hora:"22:00", local:"Nueva Zelanda",   visitante:"Bélgica",          jornada:3, sede:"Vancouver"},
   {id:"G2J3", grupo:"G", fecha:"2026-06-26", hora:"22:00", local:"Egipto",          visitante:"Irán",             jornada:3, sede:"Seattle"},
