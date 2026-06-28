@@ -433,6 +433,22 @@ html,body{overflow-x:hidden;max-width:100%}
 .api-dot{width:7px;height:7px;border-radius:50%;background:var(--g3);flex-shrink:0}
 .api-dot.ok{background:#22c55e}.api-dot.err{background:var(--er)}.api-dot.loading{background:var(--ey)}
 
+/* ── CLASIFICADOS REALES EN GRUPO ──────────────── */
+.grupo-real-box{background:var(--w);border:1px solid var(--ln);margin-bottom:1.25rem}
+.grupo-real-head{background:var(--k);padding:.45rem .85rem;font-size:.52rem;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,.45)}
+.gr-row{display:flex;align-items:center;gap:.5rem;padding:.55rem .85rem;border-top:1px solid var(--ln)}
+.gr-pos{width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:.58rem;font-weight:800;flex-shrink:0}
+.gr-team{display:flex;align-items:center;gap:.38rem;font-size:.74rem;font-weight:600;flex:1}
+.gr-pts-row{padding:.55rem .85rem;border-top:1px solid var(--ln);display:flex;align-items:center;justify-content:space-between;background:var(--bg)}
+.gr-pts-lbl{font-size:.6rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--g3)}
+.gr-pts-val{font-size:.85rem;font-weight:900}
+.gr-pts-val.ok{color:var(--p)}.gr-pts-val.zero{color:var(--g3)}
+.gr-no-pred{padding:.55rem .85rem;border-top:1px solid var(--ln);font-size:.65rem;color:var(--g3);font-style:italic}
+
+/* ── ADMIN QP HINT ─────────────────────────────── */
+.admin-qp-hint{font-size:.58rem;color:var(--er);font-weight:700;padding:.3rem .5rem;background:#fff5f5;border-radius:2px;margin-top:.25rem;display:none}
+.admin-qp-hint.show{display:block}
+
 /* ── MISC ──────────────────────────────────────── */
 .spin{display:inline-block;width:22px;height:22px;border:2px solid var(--ln);border-top-color:var(--p);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -768,7 +784,7 @@ const db = firebase.firestore();
 
 let CU=null, CUD=null, isAdmin=false, misP={}, resultados={}, simClas={};
 let simWin={}, ffWin={}; 
-let resultadosKO={}, misPKO={};           
+let resultadosKO={}, misPKO={}, misGrupos={};
 const QP_STATE={}, ADM_QP_STATE={};        
 let bkMobRound={sim:0, ff:0}; 
 let grupoActivo='A', calDiaActivo='';
@@ -864,7 +880,7 @@ function goSlide(i){
 
 async function initApp(){
   initSlider();
-  await Promise.all([loadServerTime(), loadResultados(), loadMisP(), loadFFBracket(), loadResultadosKO(), loadMisPronosKO()]);
+  await Promise.all([loadServerTime(), loadResultados(), loadMisP(), loadFFBracket(), loadResultadosKO(), loadMisPronosKO(), loadMisGrupos()]);
   syncFFWinFromResults();
   actualizarMiContador(); 
   if(isAdmin) seedPartidos(); 
@@ -907,6 +923,17 @@ async function loadResultadosKO(){
 async function loadMisPronosKO(){
   try{ const s=await db.collection('pronosticosKO').doc(CU.uid).collection('partidos').get(); s.forEach(d=>misPKO[d.id]=d.data()); }catch(e){}
 }
+async function loadMisGrupos(){
+  try{ const s=await db.collection('pronosticosGrupos').doc(CU.uid).collection('grupos').get(); s.forEach(d=>{ misGrupos[d.id]=d.data(); }); }catch(e){}
+}
+// Devuelve TODOS_KO enriquecido: si un partido KO tiene local/visitante null,
+// los rellena desde resultadosKO (que el admin ya habrá guardado al propagar ganadores).
+function getTodosKOEnriquecidos(){
+  return TODOS_KO.map(p=>{
+    const r=resultadosKO[p.id]||{};
+    return {...p, local:p.local||r.local||null, visitante:p.visitante||r.visitante||null};
+  });
+}
 function syncFFWinFromResults(){
   if(typeof TODOS_KO==='undefined') return;
   TODOS_KO.forEach(p=>{ const r=resultadosKO[p.id]; if(r&&r.terminado&&r.ganador) ffWin[p.id]=r.ganador; });
@@ -914,8 +941,11 @@ function syncFFWinFromResults(){
 function updateTopPts(){
   let t=0;
   PARTIDOS_GRUPOS.forEach(p=>{ const pts=calcPts(p.id,p.local,p.visitante); if(pts!==null)t+=pts; });
+  // Puntos de clasificados de grupos
+  Object.values(misGrupos).forEach(g=>{ t+=(g.pts||0); });
+  // Puntos KO usando datos enriquecidos (incluye R16+ si ya hay ganadores)
   if(typeof TODOS_KO!=='undefined'){
-    TODOS_KO.forEach(p=>{ if(!p.local||!p.visitante)return; const pts=calcPtsKO(p.id,p.local,p.visitante); if(pts!==null)t+=pts; });
+    getTodosKOEnriquecidos().forEach(p=>{ if(!p.local||!p.visitante)return; const pts=calcPtsKO(p.id,p.local,p.visitante); if(pts!==null)t+=pts; });
   }
   document.getElementById('top-pts').textContent=t+' pts';
 }
@@ -1164,6 +1194,7 @@ function cardKO(p){
       <input class="ai adko-v" type="number" min="0" max="20" placeholder="V" value="${rv?r.gv:''}" oninput="onAdmKOChange(this,'${pid}')"/>
       <label class="admin-lbl"><input type="checkbox" class="adko-t" ${rv?'checked':''}/> Final</label>
     </div>
+    <div class="admin-qp-hint${(rv&&r.gl===r.gv)?' show':''}" id="admhint-${pid}">⚠️ Empate → seleccioná quién avanza abajo antes de guardar</div>
     <div class="admin-qp-row" id="admqp-${pid}" style="${(rv&&r.gl===r.gv)?'':'display:none'}">
       <button class="admin-qp-btn${qpAdm==='local'?' sel':''}" id="admqpl-${pid}" onclick="setAdmQP('${pid}','local')">${p.local}</button>
       <button class="admin-qp-btn${qpAdm==='visitante'?' sel':''}" id="admqpv-${pid}" onclick="setAdmQP('${pid}','visitante')">${p.visitante}</button>
@@ -1201,8 +1232,11 @@ function setAdmQP(pid,slot){
 function onAdmKOChange(input,pid){
   const card=input.closest('.admin-box');
   const gl=parseInt(card?.querySelector('.adko-l')?.value), gv=parseInt(card?.querySelector('.adko-v')?.value);
+  const esEmpate=!isNaN(gl)&&!isNaN(gv)&&gl===gv;
   const row=document.getElementById('admqp-'+pid);
-  if(row) row.style.display=(!isNaN(gl)&&!isNaN(gv)&&gl===gv)?'':'none';
+  const hint=document.getElementById('admhint-'+pid);
+  if(row) row.style.display=esEmpate?'':'none';
+  if(hint) hint.classList.toggle('show', esEmpate);
 }
 
 function toggleCtx(btn){
@@ -1263,7 +1297,7 @@ async function guardarKO(btn,matchId,pid){
   try{
     await db.collection('pronosticosKO').doc(CU.uid).collection('partidos').doc(matchId).set(data);
     misPKO[matchId]=data; toast('¡Pronóstico KO guardado! ⚽','ok');
-    updateTopPts(); renderHoy(); renderCalendario(); renderFaseFinal();
+    updateTopPts(); renderInicio(); renderHoy(); renderCalendario(); renderFaseFinal();
   }catch(e){ toast('Error al guardar: '+e.message,'err'); }
 }
 
@@ -1309,6 +1343,7 @@ async function guardarResKO(btn,matchId,pid){
     syncFFWinFromResults();
     toast('Resultado KO guardado. ✅ Calculando puntos...','ok');
     await calcPtsTodosKO(matchId, partido);
+    await loadUD(); // refrescar CUD para que carnet muestre puntos actualizados
     updateTopPts(); renderHoy(); renderCalendario(); renderFaseFinal(); renderInicio();
   }catch(e){ toast('Error: '+e.message,'err'); }
 }
@@ -1541,6 +1576,8 @@ async function recalcularTotalesCompleto(){
     }
     await batch.commit();
     invalidarUsuarios();
+    await loadUD(); // refrescar CUD con nuevos puntos
+    await loadMisGrupos(); // refrescar puntos de grupos del usuario actual
     updateTopPts(); renderInicio(); if(typeof renderRanking==='function') renderRanking();
     toast('Totales actualizados ✅','ok');
   }catch(e){ console.error('Error recalcularTotalesCompleto:',e); }
@@ -1549,7 +1586,8 @@ async function recalcularTotalesCompleto(){
 function renderInicio(){
   const hoyStr=hoy();
   const proxGrupos=PARTIDOS_GRUPOS.filter(p=>estadoP(p)==='hoy'||estadoP(p)==='futuro');
-  const proxKO=(typeof TODOS_KO!=='undefined')?TODOS_KO.filter(p=>p.local&&p.visitante&&(p.fecha===hoyStr||p.fecha>hoyStr)):[];
+  const todosKOEnriq=(typeof TODOS_KO!=='undefined')?getTodosKOEnriquecidos():[];
+  const proxKO=todosKOEnriq.filter(p=>p.local&&p.visitante&&(p.fecha===hoyStr||p.fecha>hoyStr));
   const proxAll=[...proxGrupos,...proxKO].sort((a,b)=>((a.fecha||'')+(a.hora||'')).localeCompare((b.fecha||'')+(b.hora||'')));
   const prox=proxAll.slice(0,4);
   const el=document.getElementById('inicio-parts');
@@ -1663,11 +1701,13 @@ function renderHoy(){
   const hoyStr=hoy();
   const partsGrupo=PARTIDOS_GRUPOS.filter(p=>p.fecha===hoyStr).map(p=>({...p,_tipo:'grupo'}));
   let partsKO=[];
-  if(typeof TODOS_KO!=='undefined') partsKO=TODOS_KO.filter(p=>p.fecha===hoyStr&&p.local&&p.visitante).map(p=>({...p,_tipo:'ko'}));
+  if(typeof TODOS_KO!=='undefined'){
+    partsKO=getTodosKOEnriquecidos().filter(p=>p.fecha===hoyStr&&p.local&&p.visitante).map(p=>({...p,_tipo:'ko'}));
+  }
   const todosHoy=[...partsGrupo,...partsKO].sort((a,b)=>(a.hora||'').localeCompare(b.hora||''));
   if(!todosHoy.length){
     const proxG=PARTIDOS_GRUPOS.filter(p=>estadoP(p)==='futuro').map(p=>({...p,_tipo:'grupo'}));
-    let proxKO=[]; if(typeof TODOS_KO!=='undefined') proxKO=TODOS_KO.filter(p=>p.local&&p.visitante&&p.fecha>hoyStr).map(p=>({...p,_tipo:'ko'}));
+    let proxKO=[]; if(typeof TODOS_KO!=='undefined') proxKO=getTodosKOEnriquecidos().filter(p=>p.local&&p.visitante&&p.fecha>hoyStr).map(p=>({...p,_tipo:'ko'}));
     let prox=[...proxG,...proxKO].sort((a,b)=>((a.fecha||'')+(a.hora||'')).localeCompare((b.fecha||'')+(b.hora||''))).slice(0,4);
     if(!prox.length){cont.innerHTML='<div class="empty-state">No hay partidos próximos programados.</div>';return;}
     const d=new Date((prox[0].fecha||'2026-06-28')+'T12:00:00');
@@ -1765,6 +1805,34 @@ function renderGrupoDetail(gk){
       <span class="gnum">${t.j}</span><span class="gnum">${t.g}</span><span class="gnum">${t.p}</span><span class="gnum">${gd}</span><span class="gnum b">${t.pts}</span></div>`;
   });
   h+='</div>';
+
+  // ── Clasificados reales + puntos obtenidos ──
+  if(typeof CLASIFICADOS_REALES!=='undefined' && CLASIFICADOS_REALES[gk]){
+    const real=CLASIFICADOS_REALES[gk];
+    const gr=misGrupos[gk];
+    const pts=gr?gr.pts:null;
+    const tienePronostico=gr&&gr.p1;
+    h+=`<div class="grupo-real-box">
+      <div class="grupo-real-head">✅ Clasificados reales — ${g.nombre}</div>
+      <div class="gr-row">
+        <div class="gr-pos p1">1°</div>
+        <div class="gr-team">${gflag(real.eq1)}<span>${real.eq1}</span></div>
+      </div>
+      <div class="gr-row">
+        <div class="gr-pos p2">2°</div>
+        <div class="gr-team">${gflag(real.eq2)}<span>${real.eq2}</span></div>
+      </div>`;
+    if(tienePronostico){
+      h+=`<div class="gr-pts-row">
+        <span class="gr-pts-lbl">Tu pronóstico: ${gr.p1} y ${gr.p2}</span>
+        <span class="gr-pts-val ${pts>0?'ok':'zero'}">${pts>0?'+'+pts+' pts ✅':'0 pts'}</span>
+      </div>`;
+    } else {
+      h+=`<div class="gr-no-pred">No hiciste pronóstico de clasificados en este grupo.</div>`;
+    }
+    h+='</div>';
+  }
+
   h+=`<div class="sh"><h2>Partidos</h2></div><div class="partidos-2col">`;
   [1,2,3].forEach(j=>{
     parts.filter(p=>p.jornada===j).forEach(p=>{ h+=partidoCard(p); });
@@ -1777,7 +1845,7 @@ function _calPorFecha(){
   const porFecha={};
   PARTIDOS_GRUPOS.forEach(p=>{ if(!porFecha[p.fecha])porFecha[p.fecha]=[]; porFecha[p.fecha].push({...p,_tipo:'grupo'}); });
   if(typeof TODOS_KO!=='undefined'){
-    TODOS_KO.forEach(p=>{ if(!p.fecha||!p.local||!p.visitante)return; if(!porFecha[p.fecha])porFecha[p.fecha]=[]; porFecha[p.fecha].push({...p,_tipo:'ko'}); });
+    getTodosKOEnriquecidos().forEach(p=>{ if(!p.fecha||!p.local||!p.visitante)return; if(!porFecha[p.fecha])porFecha[p.fecha]=[]; porFecha[p.fecha].push({...p,_tipo:'ko'}); });
   }
   Object.keys(porFecha).forEach(f=>porFecha[f].sort((a,b)=>(a.hora||'').localeCompare(b.hora||'')));
   return porFecha;
@@ -1870,6 +1938,7 @@ function simToggle(gk,eq){
   }
   renderSimulador();
 }
+// ── BRACKET FF: construye rounds usando IDs reales de partidos_ko.js ─────────
 const CRUCES16=[
   {a:{pos:1,g:'A'}, b:{pos:2,g:'C'}},
   {a:{pos:1,g:'B'}, b:{pos:2,g:'D'}},
@@ -1886,22 +1955,36 @@ const CRUCES16=[
 ];
 const ROUND_NAMES=['16avos','Octavos','Cuartos','Semifinal','Final'];
 
+// Esto garantiza que ffWin['M73'] coincida con m.id='M73' en el bracket.
+function buildRoundsFF(){
+  const enriq=getTodosKOEnriquecidos();
+  function ep(id){ return enriq.find(x=>x.id===id)||{}; }
+  function toMatch(p){
+    const en=ep(p.id);
+    const a=en.local||p.local||null;
+    const b=en.visitante||p.visitante||null;
+    return {id:p.id, a, b, la:a||(p.ph?.local)||'Por definir', lb:b||(p.ph?.visitante)||'Por definir'};
+  }
+  const r32L=PARTIDOS_R32.filter(p=>p.llave==='L').sort((a,b)=>a.pos-b.pos);
+  const r32R=PARTIDOS_R32.filter(p=>p.llave==='R').sort((a,b)=>a.pos-b.pos);
+  const r16L=PARTIDOS_R16.filter(p=>p.llave==='L').sort((a,b)=>a.pos-b.pos);
+  const r16R=PARTIDOS_R16.filter(p=>p.llave==='R').sort((a,b)=>a.pos-b.pos);
+  const qfL=PARTIDOS_QF.filter(p=>p.llave==='L').sort((a,b)=>a.pos-b.pos);
+  const qfR=PARTIDOS_QF.filter(p=>p.llave==='R').sort((a,b)=>a.pos-b.pos);
+  const sfL=PARTIDOS_SF.filter(p=>p.llave==='L');
+  const sfR=PARTIDOS_SF.filter(p=>p.llave==='R');
+  return [
+    [...r32L,...r32R].map(toMatch),
+    [...r16L,...r16R].map(toMatch),
+    [...qfL,...qfR].map(toMatch),
+    [...sfL,...sfR].map(toMatch),
+    [toMatch(PARTIDO_FINAL)],
+  ];
+}
+
+// ── BRACKET SIM: lógica genérica original ────────────────────────────────────
 function buildSeeds(mode){
   const seeds=[];
-  if(mode==='ff'){
-    if(typeof PARTIDOS_R32!=='undefined' && PARTIDOS_R32.length===16){
-      const lL=PARTIDOS_R32.filter(p=>p.llave==='L').sort((a,b)=>a.pos-b.pos);
-      const lR=PARTIDOS_R32.filter(p=>p.llave==='R').sort((a,b)=>a.pos-b.pos);
-      [...lL,...lR].forEach(p=>{
-        const a=p.local||p.ph?.local||null, b=p.visitante||p.ph?.visitante||null;
-        seeds.push({ a, b, id:p.id, la:a||'Por definir', lb:b||'Por definir' });
-      });
-      return seeds;
-    }
-    CRUCES16.forEach(c=>{ seeds.push({a:null,b:null,la:`1° Grupo ${c.a.g}`,lb:`2° Grupo ${c.b.g}`}); });
-    for(let i=0;i<4;i++) seeds.push({a:null,b:null,la:'Mejor 3°',lb:'Mejor 3°'});
-    return seeds;
-  }
   const terceros=[];
   Object.keys(GRUPOS).forEach(gk=>{ if(simClas[gk]?.length>=3) terceros.push(simClas[gk][2]); });
   const getEq=s=>simClas[s.g]?.[s.pos-1]||null;
@@ -1911,13 +1994,12 @@ function buildSeeds(mode){
   for(let i=0;i<4;i++){
     seeds.push({a:terceros[i*2]||null, b:terceros[i*2+1]||null, la:'Mejor 3°', lb:'Mejor 3°'});
   }
-  return seeds; 
+  return seeds;
 }
-
 function computeRounds(seeds, win){
   const winnerOf=m=>{ const w=win[m.id]; return (w&&(w===m.a||w===m.b))?w:null; };
   const rounds=[];
-  rounds[0]=seeds.map((s,i)=>({id:'r0m'+i, a:s.a, b:s.b, la:s.la, lb:s.lb}));
+  rounds[0]=seeds.map((s,i)=>({id:s.id||('r0m'+i), a:s.a, b:s.b, la:s.la, lb:s.lb}));
   let prev=rounds[0], r=1;
   while(prev.length>1){
     const cur=[];
@@ -1949,14 +2031,36 @@ function bkCol(mode, matches, title){
 function renderBracket(containerId, mode){
   const cont=document.getElementById(containerId);
   if(!cont) return;
-  const seeds=buildSeeds(mode);
+
+  let rounds;
+  if(mode==='ff'){
+    // Modo fase final: usa IDs reales para que ffWin coincida
+    rounds=buildRoundsFF();
+  } else {
+    // Modo simulador: lógica genérica interactiva
+    const seeds=buildSeeds(mode);
+    const result=computeRounds(seeds, simWin);
+    rounds=result.rounds;
+  }
+
   const win=mode==='sim'?simWin:ffWin;
-  const {rounds, winnerOf}=computeRounds(seeds, win);
+  const winnerOf=m=>{ const w=win[m.id]; return (w&&(w===m.a||w===m.b))?w:null; };
+
   const half=n=>({L:rounds[n].slice(0,rounds[n].length/2), R:rounds[n].slice(rounds[n].length/2)});
   const r0=half(0), r1=half(1), r2=half(2), r3=half(3);
   const final=rounds[4][0];
-  const loser=m=>{ const w=winnerOf(m); if(!w) return null; return w===m.a?m.b:m.a; };
-  const tercer={id:'r3p', a:loser(rounds[3][0]), b:loser(rounds[3][1]), la:'Perdedor SF', lb:'Perdedor SF'};
+
+  // Tercer puesto
+  let tercer;
+  if(mode==='ff'){
+    const enriq=getTodosKOEnriquecidos();
+    const tp=enriq.find(p=>p.id===PARTIDO_TERCERO.id)||{};
+    tercer={id:PARTIDO_TERCERO.id, a:tp.local||null, b:tp.visitante||null, la:tp.local||'Perdedor SF', lb:tp.visitante||'Perdedor SF'};
+  } else {
+    const loser=m=>{ const w=winnerOf(m); if(!w) return null; return w===m.a?m.b:m.a; };
+    tercer={id:'r3p', a:loser(rounds[3][0]), b:loser(rounds[3][1]), la:'Perdedor SF', lb:'Perdedor SF'};
+  }
+
   const champHTML=`<div class="bk-champ">${win[final.id]?`<span class="bk-champ-flag">${sflag(win[final.id])}</span> ${win[final.id]}`:'Campeón por definir'}</div>`;
 
   const desktop=`
@@ -2063,12 +2167,16 @@ setInterval(() => {
   const hayQueActualizar = PARTIDOS_GRUPOS.some(p => {
     const dt = new Date(p.fecha + 'T' + p.hora + ':00-05:00');
     return dt <= ahora && dt > new Date(ahora - 35000);
-  });
+  }) || (typeof TODOS_KO !== 'undefined' && getTodosKOEnriquecidos().some(p => {
+    if(!p.local||!p.visitante) return false;
+    const dt = new Date(p.fecha + 'T' + (p.hora||'23:59') + ':00-05:00');
+    return dt <= ahora && dt > new Date(ahora - 35000);
+  }));
   if (hayQueActualizar) {
-    renderHoy(); renderGrupos(); renderCalendario(); renderInicio();
+    renderHoy(); renderGrupos(); renderCalendario(); renderInicio(); renderFaseFinal();
   }
 }, 30000);
 </script>
-<div style="text-align:center;padding:.5rem;font-size:.55rem;color:#bbb;letter-spacing:1px">v3.0</div>
+<div style="text-align:center;padding:.5rem;font-size:.55rem;color:#bbb;letter-spacing:1px">v3.1</div>
 </body>
 </html>
