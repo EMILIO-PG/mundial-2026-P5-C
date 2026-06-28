@@ -1127,8 +1127,12 @@ function cardKO(p){
   } else { centro=`<span class="vs">vs</span>`; }
   const pid=p.id.replace(/[^a-zA-Z0-9]/g,'_');
   const sGL=pr?.gl??'', sGV=pr?.gv??'', sQP=pr?.quienPasa||'';
+  // Restaurar QP_STATE desde el pronóstico guardado para que el botón quede seleccionado
+  if(sQP && !QP_STATE[pid]) QP_STATE[pid]=sQP;
   const piC=esEcu?' ecu':'', btnC=esEcu?' ecu':'';
   const empate=sGL!==''&&sGV!==''&&(+sGL===+sGV);
+  // Usar QP_STATE como fuente de verdad para la selección visual
+  const qpActual=QP_STATE[pid]||sQP;
   let pronHTML=`<div class="pron"><div class="pron-lbl">Tu pronóstico · 90 min</div>
   <div class="pi-row">
     <input class="pi pi-kl${piC}" type="number" min="0" max="20" value="${sGL}" ${bloq?'disabled':''} placeholder="-" oninput="onKOChange(this,'${pid}')"/>
@@ -1138,8 +1142,8 @@ function cardKO(p){
   <div class="qp-wrap${empate?' show':''}" id="qpw-${pid}">
     <div class="qp-lbl">¿Quién avanza?</div>
     <div class="qp-row">
-      <button class="qp-btn${sQP==='local'?' sel':''}${p.local==='Ecuador'?' ecuqp':''}" id="qpl-${pid}" ${bloq?'disabled':''} onclick="setQP('${pid}','local')">${BANDERAS[p.local]?`<img src="https://flagcdn.com/w40/${BANDERAS[p.local]}.png" alt=""/>`:''} ${p.local}</button>
-      <button class="qp-btn${sQP==='visitante'?' sel':''}${p.visitante==='Ecuador'?' ecuqp':''}" id="qpr-${pid}" ${bloq?'disabled':''} onclick="setQP('${pid}','visitante')">${BANDERAS[p.visitante]?`<img src="https://flagcdn.com/w40/${BANDERAS[p.visitante]}.png" alt=""/>`:''} ${p.visitante}</button>
+      <button class="qp-btn${qpActual==='local'?' sel':''}${p.local==='Ecuador'?' ecuqp':''}" id="qpl-${pid}" ${bloq?'disabled':''} onclick="setQP('${pid}','local')">${BANDERAS[p.local]?`<img src="https://flagcdn.com/w40/${BANDERAS[p.local]}.png" alt=""/>`:''} ${p.local}</button>
+      <button class="qp-btn${qpActual==='visitante'?' sel':''}${p.visitante==='Ecuador'?' ecuqp':''}" id="qpr-${pid}" ${bloq?'disabled':''} onclick="setQP('${pid}','visitante')">${BANDERAS[p.visitante]?`<img src="https://flagcdn.com/w40/${BANDERAS[p.visitante]}.png" alt=""/>`:''} ${p.visitante}</button>
     </div>
   </div>
   <div class="pron-pts-ko">Exacto <strong>300</strong> · Resultado <strong>200</strong> · Empate+pasa <strong>100</strong>${esEcu?' · <strong>×2 Ecuador</strong>':''}</div>`;
