@@ -1434,7 +1434,8 @@ async function calcPtsGruposTodos(){
         const real=CLASIFICADOS_REALES[gk];
         if(!real) continue;
         const pronosticados=partsDG.filter(p=>{ const pr=pronUser[p.id]; return pr&&pr.local!==undefined&&pr.visitante!==undefined; });
-        if(pronosticados.length<partsDG.length) continue;
+        const minRequerido = gk==='G' ? 5 : partsDG.length;
+        if(pronosticados.length<minRequerido) continue;
         const tabla=computeGroupTableFor(gk,pronUser);
         const p1=tabla[0]?.eq, p2=tabla[1]?.eq;
         let pts=0;
