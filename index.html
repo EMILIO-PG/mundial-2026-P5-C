@@ -11,6 +11,7 @@
 <script src="firebase.js"></script>
 <script src="data/partidos.js"></script>
 <script src="data/partidos_ko.js"></script>
+<script src="data/clasificados.js"></script>
 <script src="data/contexto.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1177,8 +1178,9 @@ function cardKO(p){
 }
 
 function onKOChange(input,pid){
-  const card=input.closest('.pc');
-  const gl=parseInt(card?.querySelector('.pi-kl')?.value), gv=parseInt(card?.querySelector('.pi-kv')?.value);
+  const card=input.closest('.pron');
+  const gl=parseInt(card?.querySelector('.pi-kl')?.value);
+  const gv=parseInt(card?.querySelector('.pi-kv')?.value);
   const qpw=document.getElementById('qpw-'+pid);
   if(qpw) qpw.classList.toggle('show', !isNaN(gl)&&!isNaN(gv)&&gl===gv);
 }
@@ -1301,8 +1303,9 @@ async function guardarResKO(btn,matchId,pid){
       }
     }
     syncFFWinFromResults();
-    toast('Resultado KO guardado. ✅','ok');
-    updateTopPts(); renderHoy(); renderCalendario(); renderFaseFinal();
+    toast('Resultado KO guardado. ✅ Calculando puntos...','ok');
+    await calcPtsTodosKO(matchId, partido);
+    updateTopPts(); renderHoy(); renderCalendario(); renderFaseFinal(); renderInicio();
   }catch(e){ toast('Error: '+e.message,'err'); }
 }
 
@@ -1414,6 +1417,59 @@ async function calcPtsTodos(pid){
   }catch(e){console.error('Error calc pts:',e);}
 }
 
+async function calcPtsGruposTodos(){
+  if(!isAdmin){ toast('Solo el admin puede hacer esto.','err'); return; }
+  if(typeof CLASIFICADOS_REALES==='undefined'){ toast('Falta cargar clasificados.js','err'); return; }
+  toast('Calculando puntos de grupos...','info');
+  try{
+    const users=await db.collection('usuarios').get();
+    const batch=db.batch();
+    for(const ud of users.docs){
+      const uid=ud.id;
+      const snap=await db.collection('pronosticos').doc(uid).collection('partidos').get();
+      const pronUser={};
+      snap.forEach(d=>{ pronUser[d.id]=d.data(); });
+      for(const gk of Object.keys(GRUPOS)){
+        const partsDG=PARTIDOS_GRUPOS.filter(p=>p.grupo===gk);
+        const real=CLASIFICADOS_REALES[gk];
+        if(!real) continue;
+        const pronosticados=partsDG.filter(p=>{ const pr=pronUser[p.id]; return pr&&pr.local!==undefined&&pr.visitante!==undefined; });
+        if(pronosticados.length<partsDG.length) continue;
+        const tabla=computeGroupTableFor(gk,pronUser);
+        const p1=tabla[0]?.eq, p2=tabla[1]?.eq;
+        let pts=0;
+        if(p1===real.eq1&&p2===real.eq2) pts=PUNTOS.GRUPO_CLASIFICADOS_ORDEN;
+        else if(p1===real.eq2&&p2===real.eq1) pts=PUNTOS.GRUPO_CLASIFICADOS_SIN_ORDEN;
+        const ref=db.collection('pronosticosGrupos').doc(uid).collection('grupos').doc(gk);
+        batch.set(ref,{p1,p2,real1:real.eq1,real2:real.eq2,pts,gk,ts:firebase.firestore.FieldValue.serverTimestamp()});
+      }
+    }
+    await batch.commit();
+    toast('Puntos de grupos calculados ✅ Recalculando totales...','ok');
+    await recalcularTotalesCompleto();
+  }catch(e){ console.error('Error calcPtsGruposTodos:',e); toast('Error: '+e.message,'err'); }
+}
+
+async function calcPtsTodosKO(matchId, partido){
+  if(!partido||!partido.local||!partido.visitante) return;
+  try{
+    const users=await db.collection('usuarios').get();
+    const batch=db.batch();
+    for(const ud of users.docs){
+      const uid=ud.id;
+      const ref=db.collection('pronosticosKO').doc(uid).collection('partidos').doc(matchId);
+      const snap=await ref.get();
+      if(!snap.exists) continue;
+      const pr=snap.data();
+      if(pr.gl===undefined||pr.gv===undefined) continue;
+      const pts=calcPtsKO(matchId,partido.local,partido.visitante);
+      batch.set(ref,{pts:pts||0,calculado:true},{merge:true});
+    }
+    await batch.commit();
+    await recalcularTotalesCompleto();
+  }catch(e){ console.error('Error calcPtsTodosKO:',e); }
+}
+
 async function recalcularTotales(users){
   try{
     if(!users) users=await db.collection('usuarios').get();
@@ -1438,6 +1494,51 @@ async function recalcularTotales(users){
     await batch.commit();
     invalidarUsuarios(); 
   }catch(e){console.error('Error recalc totales:',e);}
+}
+
+async function recalcularTotalesCompleto(){
+  try{
+    const users=await db.collection('usuarios').get();
+    const batch=db.batch();
+    for(const ud of users.docs){
+      const uid=ud.id;
+      const partsSnap=await db.collection('pronosticos').doc(uid).collection('partidos').get();
+      let puntos=0, aciertos=0, ex=0, co=0, fa=0, he=0;
+      partsSnap.forEach(d=>{
+        const x=d.data();
+        if(x.local===undefined||x.visitante===undefined) return;
+        he++;
+        const res=resultados[d.id];
+        if(!res||!res.finalizado) return;
+        puntos+=(x.pts||0);
+        if(x.acierto) aciertos++;
+        const pl=parseInt(x.local), pv=parseInt(x.visitante);
+        if(pl===res.local&&pv===res.visitante){ex++;return;}
+        const ok=(res.local>res.visitante&&pl>pv)||(res.visitante>res.local&&pv>pl)||(res.local===res.visitante&&pl===pv);
+        if(ok) co++; else fa++;
+      });
+      try{
+        const grSnap=await db.collection('pronosticosGrupos').doc(uid).collection('grupos').get();
+        grSnap.forEach(d=>{ puntos+=(d.data().pts||0); });
+      }catch(e){}
+      try{
+        const koSnap=await db.collection('pronosticosKO').doc(uid).collection('partidos').get();
+        koSnap.forEach(d=>{
+          const x=d.data();
+          if(x.gl===undefined) return;
+          const partido=(typeof TODOS_KO!=='undefined')?TODOS_KO.find(p=>p.id===d.id):null;
+          if(!partido) return;
+          const pts=calcPtsKO(d.id,partido.local,partido.visitante);
+          if(pts!==null&&pts>0) puntos+=pts;
+        });
+      }catch(e){}
+      batch.update(db.collection('usuarios').doc(uid),{puntos,aciertos,stExactos:ex,stCorrectos:co,stFallas:fa,stHechos:he});
+    }
+    await batch.commit();
+    invalidarUsuarios();
+    updateTopPts(); renderInicio(); if(typeof renderRanking==='function') renderRanking();
+    toast('Totales actualizados ✅','ok');
+  }catch(e){ console.error('Error recalcularTotalesCompleto:',e); }
 }
 
 function renderInicio(){
@@ -1592,9 +1693,38 @@ function renderGrupos(){
     </div>`;
   });
   tabsEl.innerHTML=tabsH;
+  if(isAdmin && !document.getElementById('adm-calc-grupos')){
+    const btn=document.createElement('button');
+    btn.id='adm-calc-grupos';
+    btn.className='sync-btn';
+    btn.style.cssText='margin-bottom:1rem;background:var(--er)';
+    btn.textContent='⚙️ Admin — Calcular puntos de grupos (clasificados)';
+    btn.onclick=()=>{ if(confirm('¿Calcular y asignar puntos de clasificados de grupos a TODOS los usuarios? Solo hazlo una vez.')) calcPtsGruposTodos(); };
+    tabsEl.before(btn);
+  }
   renderGrupoDetail(grupoActivo);
 }
 function selectGrupo(gk){ grupoActivo=gk; renderGrupos(); }
+function computeGroupTableFor(gk, pronosticos){
+  const g=GRUPOS[gk];
+  const st={};
+  g.equipos.forEach(eq=>{ st[eq]={eq,j:0,g:0,e:0,p:0,gf:0,gc:0,pts:0}; });
+  PARTIDOS_GRUPOS.filter(p=>p.grupo===gk).forEach(p=>{
+    const pr=pronosticos[p.id];
+    if(!pr||pr.local===undefined||pr.visitante===undefined) return;
+    const L=st[p.local], V=st[p.visitante];
+    if(!L||!V) return;
+    const gl=parseInt(pr.local), gv=parseInt(pr.visitante);
+    if(isNaN(gl)||isNaN(gv)) return;
+    L.j++; V.j++; L.gf+=gl; L.gc+=gv; V.gf+=gv; V.gc+=gl;
+    if(gl>gv){ L.g++; L.pts+=3; V.p++; }
+    else if(gv>gl){ V.g++; V.pts+=3; L.p++; }
+    else { L.e++; V.e++; L.pts++; V.pts++; }
+  });
+  const arr=Object.values(st).map(s=>({...s,gd:s.gf-s.gc}));
+  arr.sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf||a.eq.localeCompare(b.eq));
+  return arr;
+}
 function computeGroupTable(gk){
   const g=GRUPOS[gk];
   const st={};
