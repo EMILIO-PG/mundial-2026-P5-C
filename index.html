@@ -622,15 +622,18 @@ html,body{overflow-x:hidden;max-width:100%}
               <div class="pts-ejemplo"><strong>Ejemplo:</strong> Ecuador gana 2-0. Si pronosticaste 2-0 → <strong>400 pts</strong>. Si pronosticaste 1-0 → <strong>200 pts</strong>.</div>
             </div>
             <div class="pts-card b">
-              <div class="pts-head">🗂 Fase de grupos</div>
-              <div class="pts-row"><span>Clasificados en orden exacto</span><span class="pts-val">100</span></div>
-              <div class="pts-row"><span>Clasificados sin importar orden</span><span class="pts-val">50</span></div>
-              <div class="pts-ejemplo"><strong>Ejemplo:</strong> Grupo E: 1° Alemania, 2° Ecuador. Si los pusiste en ese orden → <strong>100 pts</strong>. Si los invertiste → <strong>50 pts</strong>.</div>
+              <div class="pts-head">⚔️ Partidos eliminatorios</div>
+              <div class="pts-row"><span>Marcador exacto (90 min)</span><span class="pts-val">300</span></div>
+              <div class="pts-row"><span>Resultado correcto</span><span class="pts-val">200</span></div>
+              <div class="pts-row"><span>Empate + aciertas quién avanza</span><span class="pts-val">100</span></div>
+              <div class="pts-ejemplo"><strong>Ejemplo:</strong> Pronosticas 1-0 y termina 1-0 → <strong>300 pts</strong>. Si termina 2-0 (igual gana el mismo) → <strong>200 pts</strong>. Si va a penales y aciertas quién avanza → <strong>100 pts</strong>.</div>
             </div>
             <div class="pts-card r">
-              <div class="pts-head">🏆 Fase Final</div>
-              <div class="pts-row"><span>Aciertas quién avanza en cada ronda</span><span class="pts-val">50</span></div>
-              <div class="pts-ejemplo"><strong>Ejemplo:</strong> Pronosticas que Brasil pasa a cuartos y lo hace → <strong>50 pts</strong>. Aplica en cada ronda eliminatoria.</div>
+              <div class="pts-head">🇪🇨 Bonus Ecuador (KO)</div>
+              <div class="pts-row"><span>Marcador exacto (Ecuador juega)</span><span class="pts-val r" style="color:var(--er)">600</span></div>
+              <div class="pts-row"><span>Resultado correcto (Ecuador juega)</span><span class="pts-val r" style="color:var(--er)">400</span></div>
+              <div class="pts-row"><span>Empate + pasa (Ecuador juega)</span><span class="pts-val r" style="color:var(--er)">200</span></div>
+              <div class="pts-ejemplo"><strong>Ejemplo:</strong> Ecuador juega y aciertas el marcador exacto → <strong>600 pts</strong> (300 × 2). Resultado correcto → <strong>400 pts</strong>. El doble aplica en todos los partidos donde juegue Ecuador.</div>
             </div>
           </div>
 
@@ -679,7 +682,7 @@ html,body{overflow-x:hidden;max-width:100%}
     <div class="sec" id="s-fasefinal">
       <div class="ff-info">
         <div>
-          <p>Los cruces de la Fase Final se definen al concluir los grupos <strong>(entre el 28 de junio y el 3 de julio de 2026)</strong>. Cuando estén confirmados podrás pronosticar al ganador de cada llave. Cada acierto vale <strong>50 puntos</strong>.</p>
+          <p>La Fase Final ya comenzó. El bracket muestra el avance real del torneo. Los puntos se otorgan automáticamente según tus pronósticos guardados: <strong>Marcador exacto → 300 pts · Resultado correcto → 200 pts · Empate + quién pasa → 100 pts</strong>. Los partidos de Ecuador cuentan el doble.</p>
           <div class="ff-cd" id="ff-cd"></div>
         </div>
         <div class="ff-counter">
@@ -1438,9 +1441,13 @@ async function recalcularTotales(users){
 }
 
 function renderInicio(){
-  const prox=PARTIDOS_GRUPOS.filter(p=>estadoP(p)==='hoy'||estadoP(p)==='futuro').slice(0,4);
+  const hoyStr=hoy();
+  const proxGrupos=PARTIDOS_GRUPOS.filter(p=>estadoP(p)==='hoy'||estadoP(p)==='futuro');
+  const proxKO=(typeof TODOS_KO!=='undefined')?TODOS_KO.filter(p=>p.local&&p.visitante&&(p.fecha===hoyStr||p.fecha>hoyStr)):[];
+  const proxAll=[...proxGrupos,...proxKO].sort((a,b)=>((a.fecha||'')+(a.hora||'')).localeCompare((b.fecha||'')+(b.hora||'')));
+  const prox=proxAll.slice(0,4);
   const el=document.getElementById('inicio-parts');
-  el.innerHTML=prox.length?prox.map(p=>partidoCard(p)).join(''):'<p style="color:var(--g3);font-size:.75rem;padding:.5rem">No hay partidos próximos.</p>';
+  el.innerHTML=prox.length?prox.map(p=>p._tipo==='ko'||typeof p.ronda!=='undefined'?cardKO(p):partidoCard(p)).join(''):'<p style="color:var(--g3);font-size:.75rem;padding:.5rem">No hay partidos próximos.</p>';
   renderInicioCarnet();
   renderInicioRank();
 }
@@ -1792,7 +1799,8 @@ function bkTeam(mode, m, side){
   const win=mode==='sim'?simWin:ffWin;
   if(!eq) return `<div class="bk-team tbd">${lbl}</div>`;
   const isWin=win[m.id]===eq;
-  return `<div class="bk-team${isWin?' win':''}" onclick="pickWinner('${mode}','${m.id}','${eq.replace(/'/g,"\\'")}')">
+  const clickable = mode === 'sim';
+  return `<div class="bk-team${isWin?' win':''}"${clickable?` onclick="pickWinner('${mode}','${m.id}','${eq.replace(/'/g,"\\'")}')"`:' style="cursor:default"'}>
     ${sflag(eq)}<span class="bk-name">${eq}</span></div>`;
 }
 function bkMatch(mode, m){
