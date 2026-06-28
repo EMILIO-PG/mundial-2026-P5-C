@@ -261,6 +261,14 @@ html,body{overflow-x:hidden;max-width:100%}
 .admin-qp-btn{flex:1;padding:.3rem;border:1px solid var(--ln);background:var(--w);font-size:.6rem;font-weight:700;font-family:'Inter',sans-serif;cursor:pointer;color:var(--g4);transition:.1s}
 .admin-qp-btn.sel{background:var(--er);color:#fff;border-color:var(--er)}
 
+.admin-qp-section{margin-top:.4rem;background:#fff8f8;border:1px solid #fecaca;padding:.45rem .6rem;border-radius:2px}
+.admin-qp-label{font-size:.58rem;font-weight:800;color:var(--er);margin-bottom:.35rem;letter-spacing:.3px}
+.admin-qp-note{font-size:.52rem;color:var(--g3);margin-top:.3rem;line-height:1.35}
+.admin-qp-row{display:flex;gap:.3rem;margin-top:.4rem;flex-wrap:wrap}
+.admin-qp-btn{flex:1;padding:.35rem;border:1.5px solid var(--ln);background:var(--w);font-size:.65rem;font-weight:700;font-family:'Inter',sans-serif;cursor:pointer;color:var(--g4);transition:.1s;text-align:center}
+.admin-qp-btn:hover{border-color:var(--er);color:var(--er)}
+.admin-qp-btn.sel{background:var(--er);color:#fff;border-color:var(--er)}
+
 /* ── ADMIN ─────────────────────────────────────── */
 .admin-box{background:#fff5f5;border:1px solid #fecaca;padding:.6rem .85rem;margin-top:.6rem}
 .admin-title{font-size:.52rem;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--er);margin-bottom:.4rem}
@@ -1186,7 +1194,7 @@ function cardKO(p){
   pronHTML+='</div>';
   let adminHTML='';
   if(isAdmin){
-    const rv=r&&r.terminado, qpAdm=(rv&&r.gl===r.gv)?r.quienPasa:'';
+    const rv=r&&r.terminado, qpAdm=rv?r.quienPasa:'';
     adminHTML=`<div class="admin-box"><div class="admin-title">⚙️ Admin — Resultado KO</div>
     <div class="admin-row">
       <input class="ai adko-l" type="number" min="0" max="20" placeholder="L" value="${rv?r.gl:''}" oninput="onAdmKOChange(this,'${pid}')"/>
@@ -1194,10 +1202,13 @@ function cardKO(p){
       <input class="ai adko-v" type="number" min="0" max="20" placeholder="V" value="${rv?r.gv:''}" oninput="onAdmKOChange(this,'${pid}')"/>
       <label class="admin-lbl"><input type="checkbox" class="adko-t" ${rv?'checked':''}/> Final</label>
     </div>
-    <div class="admin-qp-hint${(rv&&r.gl===r.gv)?' show':''}" id="admhint-${pid}">⚠️ Empate → seleccioná quién avanza abajo antes de guardar</div>
-    <div class="admin-qp-row" id="admqp-${pid}" style="${(rv&&r.gl===r.gv)?'':'display:none'}">
-      <button class="admin-qp-btn${qpAdm==='local'?' sel':''}" id="admqpl-${pid}" onclick="setAdmQP('${pid}','local')">${p.local}</button>
-      <button class="admin-qp-btn${qpAdm==='visitante'?' sel':''}" id="admqpv-${pid}" onclick="setAdmQP('${pid}','visitante')">${p.visitante}</button>
+    <div class="admin-qp-section">
+      <div class="admin-qp-label" id="admhint-${pid}">⚠️ Si hubo empate → elegí quién pasó a la siguiente ronda:</div>
+      <div class="admin-qp-row" id="admqp-${pid}">
+        <button class="admin-qp-btn${qpAdm==='local'?' sel':''}" id="admqpl-${pid}" onclick="setAdmQP('${pid}','local')">${p.local}</button>
+        <button class="admin-qp-btn${qpAdm==='visitante'?' sel':''}" id="admqpv-${pid}" onclick="setAdmQP('${pid}','visitante')">${p.visitante}</button>
+      </div>
+      <div class="admin-qp-note">Si el marcador no es empate, ignorar esta sección — se detecta automáticamente.</div>
     </div>
     <div class="admin-row" style="margin-top:.35rem"><button class="admin-save" onclick="guardarResKO(this,'${p.id}','${pid}')">Guardar KO</button></div></div>`;
   }
@@ -1230,13 +1241,8 @@ function setAdmQP(pid,slot){
   document.getElementById('admqpv-'+pid)?.classList.toggle('sel',slot==='visitante');
 }
 function onAdmKOChange(input,pid){
-  const card=input.closest('.admin-box');
-  const gl=parseInt(card?.querySelector('.adko-l')?.value), gv=parseInt(card?.querySelector('.adko-v')?.value);
-  const esEmpate=!isNaN(gl)&&!isNaN(gv)&&gl===gv;
-  const row=document.getElementById('admqp-'+pid);
-  const hint=document.getElementById('admhint-'+pid);
-  if(row) row.style.display=esEmpate?'':'none';
-  if(hint) hint.classList.toggle('show', esEmpate);
+  // La sección QP ahora siempre está visible — no hay nada que mostrar/ocultar
+  // El guardarResKO detecta automáticamente si el marcador es empate
 }
 
 function toggleCtx(btn){
@@ -2177,6 +2183,6 @@ setInterval(() => {
   }
 }, 30000);
 </script>
-<div style="text-align:center;padding:.5rem;font-size:.55rem;color:#bbb;letter-spacing:1px">v3.1</div>
+<div style="text-align:center;padding:.5rem;font-size:.55rem;color:#bbb;letter-spacing:1px">v3.2</div>
 </body>
 </html>
