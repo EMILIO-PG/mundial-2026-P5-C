@@ -68,7 +68,7 @@ const PARTIDOS_R32 = [
     ph:{ local:"1°E", visitante:"3°D" } },
 
   { id:"M77", ronda:"R32", llave:"L", pos:4,
-    fecha:"2026-06-30", hora:"15:00", sede:"Nueva Jersey",
+    fecha:"2026-06-30", hora:"16:00", sede:"Nueva Jersey",
     local:"Francia",         visitante:"Suecia",
     ph:{ local:"1°I", visitante:"3°F" } },
 
