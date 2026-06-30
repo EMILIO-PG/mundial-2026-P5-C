@@ -1013,19 +1013,22 @@ function _ptsKO(pr, r, local, vis){
   const mult=(local==='Ecuador'||vis==='Ecuador')?2:1;
   const gl=+pr.gl, gv=+pr.gv, rl=+r.gl, rv=+r.gv;
   if(isNaN(gl)||isNaN(gv)||isNaN(rl)||isNaN(rv)) return 0;
-  const predEmpate = gl===gv;
-  const realEmpate = rl===rv;
-  // El usuario predijo EMPATE
-  if(predEmpate){
-    if(!realEmpate) return 0;                          // dijo empate y NO fue empate → 0
-    return pr.quienPasa===r.quienPasa ? 100*mult : 0;  // empate real: acertó quién pasa → 100, si no → 0
+  // Quién avanzó realmente: si el partido real fue empate → r.quienPasa (penales);
+  // si hubo ganador en 90' → ese ganador.
+  const avanzaReal = (rl===rv) ? r.quienPasa : (rl>rv?'local':'visitante');
+  // CASO marcador EXACTO
+  if(gl===rl&&gv===rv){
+    if(rl===rv) return pr.quienPasa===r.quienPasa ? 300*mult : 200*mult; // empate exacto
+    return 300*mult;                                                     // resultado exacto con ganador
   }
-  // El usuario predijo GANADOR (no empate)
-  if(realEmpate) return 0;                             // dijo que había ganador pero fue empate → 0
+  // CASO el usuario predijo EMPATE (no exacto)
+  if(gl===gv){
+    if(rl===rv) return pr.quienPasa===r.quienPasa ? 200*mult : 0;        // empate real: acertó quién pasa → 200
+    return pr.quienPasa===avanzaReal ? 100*mult : 0;                     // empate predicho pero hubo ganador: acertó quién avanza → 100
+  }
+  // CASO el usuario predijo GANADOR (no exacto)
   const ganadorPred = gl>gv?'local':'visitante';
-  const ganadorReal = rl>rv?'local':'visitante';
-  if(ganadorPred!==ganadorReal) return 0;             // falló el ganador → 0
-  return ((gl===rl&&gv===rv)?300:200)*mult;           // acertó ganador: exacto 300, resultado 200
+  return ganadorPred===avanzaReal ? 200*mult : 0;                        // acertó quién avanza → 200, si no → 0
 }
 function calcPtsKO(pid,local,vis){
   return _ptsKO(misPKO[pid], resultadosKO[pid], local, vis);
@@ -1204,7 +1207,8 @@ function cardKO(p){
   else pronHTML+=`<button class="pbtn${btnC}" onclick="guardarKO(this,'${p.id}','${pid}')">Guardar pronóstico</button><div class="pron-aviso">✏️ Editable hasta el inicio del partido</div>`;
   if(pr&&pr.gl!==undefined){
     const who=sQP?` → pasa ${sQP==='local'?p.local:p.visitante}`:'';
-    pronHTML+=`<div class="pfeed">✓ ${sGL}–${sGV}${who}${pts!==null&&pts>0?` &nbsp;<span class="badge b-pts">+${pts} pts</span>`:''}</div>`;
+    const ptsTxt = pts===null ? '' : (pts>0 ? ` &nbsp;<span class="badge b-pts">+${pts} pts</span>` : ` &nbsp;<span class="badge b-line">0 pts</span>`);
+    pronHTML+=`<div class="pfeed">✓ ${sGL}–${sGV}${who}${ptsTxt}</div>`;
   }
   pronHTML+='</div>';
   let adminHTML='';
