@@ -1006,24 +1006,29 @@ function calcPts(pid,local,vis){
   if(esEcu){ const ecuG=(local==='Ecuador'&&lG)||(vis==='Ecuador'&&vG); if(ecuG&&ex) return PUNTOS.ECUADOR_MARCADOR_EXACTO; return PUNTOS.ECUADOR_RESULTADO_CORRECTO; }
   return ex?PUNTOS.MARCADOR_EXACTO:PUNTOS.RESULTADO_CORRECTO;
 }
-function calcPtsKO(pid,local,vis){
-  const r=resultadosKO[pid], pr=misPKO[pid];
+// Función pura de puntaje KO: recibe el pronóstico (pr) y el resultado (r) explícitos.
+// NO lee variables globales, por eso sirve para calcular el puntaje de CUALQUIER usuario.
+function _ptsKO(pr, r, local, vis){
   if(!r||!r.terminado||!pr||pr.gl===undefined||pr.gv===undefined) return null;
   const mult=(local==='Ecuador'||vis==='Ecuador')?2:1;
   const gl=+pr.gl, gv=+pr.gv, rl=+r.gl, rv=+r.gv;
   if(isNaN(gl)||isNaN(gv)||isNaN(rl)||isNaN(rv)) return 0;
-  if(gl===rl&&gv===rv){
-    if(rl===rv) return pr.quienPasa===r.quienPasa ? 300*mult : 200*mult;
-    return 300*mult;
+  const predEmpate = gl===gv;
+  const realEmpate = rl===rv;
+  // El usuario predijo EMPATE
+  if(predEmpate){
+    if(!realEmpate) return 0;                          // dijo empate y NO fue empate → 0
+    return pr.quienPasa===r.quienPasa ? 100*mult : 0;  // empate real: acertó quién pasa → 100, si no → 0
   }
-  if(gl===gv){
-    if(rl===rv) return pr.quienPasa===r.quienPasa ? 200*mult : 0;
-    const ganadorReal = rl>rv?'local':'visitante';
-    return pr.quienPasa===ganadorReal ? 100*mult : 0;
-  }
+  // El usuario predijo GANADOR (no empate)
+  if(realEmpate) return 0;                             // dijo que había ganador pero fue empate → 0
   const ganadorPred = gl>gv?'local':'visitante';
-  const ganadorReal = rl!==rv ? (rl>rv?'local':'visitante') : r.quienPasa;
-  return ganadorPred===ganadorReal ? 200*mult : 0;
+  const ganadorReal = rl>rv?'local':'visitante';
+  if(ganadorPred!==ganadorReal) return 0;             // falló el ganador → 0
+  return ((gl===rl&&gv===rv)?300:200)*mult;           // acertó ganador: exacto 300, resultado 200
+}
+function calcPtsKO(pid,local,vis){
+  return _ptsKO(misPKO[pid], resultadosKO[pid], local, vis);
 }
 function getCtx(pid){ return typeof CONTEXTO_PARTIDOS!=='undefined'?CONTEXTO_PARTIDOS.find(x=>x.id===pid):null; }
 
@@ -1190,8 +1195,8 @@ function cardKO(p){
   <div class="qp-wrap${empate?' show':''}" id="qpw-${pid}">
     <div class="qp-lbl">¿Quién avanza?</div>
     <div class="qp-row">
-      <button class="qp-btn${qpActual==='local'?' sel':''}${p.local==='Ecuador'?' ecuqp':''}" id="qpl-${pid}" ${bloq?'disabled':''} onclick="setQP('${pid}','local')">${BANDERAS[p.local]?`<img src="https://flagcdn.com/w40/${BANDERAS[p.local]}.png" alt=""/>`:''} ${p.local}</button>
-      <button class="qp-btn${qpActual==='visitante'?' sel':''}${p.visitante==='Ecuador'?' ecuqp':''}" id="qpr-${pid}" ${bloq?'disabled':''} onclick="setQP('${pid}','visitante')">${BANDERAS[p.visitante]?`<img src="https://flagcdn.com/w40/${BANDERAS[p.visitante]}.png" alt=""/>`:''} ${p.visitante}</button>
+      <button class="qp-btn${qpActual==='local'?' sel':''}${p.local==='Ecuador'?' ecuqp':''}" id="qpl-${pid}" ${bloq?'disabled':''} onclick="setQP(this,'${pid}','local')">${BANDERAS[p.local]?`<img src="https://flagcdn.com/w40/${BANDERAS[p.local]}.png" alt=""/>`:''} ${p.local}</button>
+      <button class="qp-btn${qpActual==='visitante'?' sel':''}${p.visitante==='Ecuador'?' ecuqp':''}" id="qpr-${pid}" ${bloq?'disabled':''} onclick="setQP(this,'${pid}','visitante')">${BANDERAS[p.visitante]?`<img src="https://flagcdn.com/w40/${BANDERAS[p.visitante]}.png" alt=""/>`:''} ${p.visitante}</button>
     </div>
   </div>
   <div class="pron-pts-ko">Exacto <strong>300</strong> · Resultado <strong>200</strong> · Empate+pasa <strong>100</strong>${esEcu?' · <strong>×2 Ecuador</strong>':''}</div>`;
@@ -1238,15 +1243,19 @@ function cardKO(p){
 
 function onKOChange(input,pid){
   const card=input.closest('.pron');
-  const gl=parseInt(card?.querySelector('.pi-kl')?.value);
-  const gv=parseInt(card?.querySelector('.pi-kv')?.value);
-  const qpw=document.getElementById('qpw-'+pid);
+  if(!card) return;
+  const gl=parseInt(card.querySelector('.pi-kl')?.value);
+  const gv=parseInt(card.querySelector('.pi-kv')?.value);
+  // Buscar el qp-wrap DENTRO de esta card, no por id global (hay ids duplicados entre secciones)
+  const qpw=card.querySelector('.qp-wrap');
   if(qpw) qpw.classList.toggle('show', !isNaN(gl)&&!isNaN(gv)&&gl===gv);
 }
-function setQP(pid,slot){
+function setQP(btn,pid,slot){
   QP_STATE[pid]=slot;
-  document.getElementById('qpl-'+pid)?.classList.toggle('sel',slot==='local');
-  document.getElementById('qpr-'+pid)?.classList.toggle('sel',slot==='visitante');
+  // Actualizar la selección visual SOLO en la card clickeada (evita ids duplicados)
+  const row=btn.closest('.qp-row');
+  if(row) row.querySelectorAll('.qp-btn').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
 }
 function setAdmQP(pid,slot){
   ADM_QP_STATE[pid]=slot;
@@ -1523,7 +1532,8 @@ async function calcPtsTodosKO(matchId, partido){
       if(!snap.exists) continue;
       const pr=snap.data();
       if(pr.gl===undefined||pr.gv===undefined) continue;
-      const pts=calcPtsKO(matchId,partido.local,partido.visitante);
+      // Calcular con el pronóstico REAL de este usuario (pr), no con la variable global
+      const pts=_ptsKO(pr, resultadosKO[matchId], partido.local, partido.visitante);
       batch.set(ref,{pts:pts||0,calculado:true},{merge:true});
     }
     await batch.commit();
@@ -1587,9 +1597,13 @@ async function recalcularTotalesCompleto(){
         koSnap.forEach(d=>{
           const x=d.data();
           if(x.gl===undefined) return;
-          const partido=(typeof TODOS_KO!=='undefined')?TODOS_KO.find(p=>p.id===d.id):null;
-          if(!partido) return;
-          const pts=calcPtsKO(d.id,partido.local,partido.visitante);
+          const base=(typeof TODOS_KO!=='undefined')?TODOS_KO.find(p=>p.id===d.id):null;
+          if(!base) return;
+          // Enriquecer equipos (R16+ tienen local/visitante null hasta propagar el ganador)
+          const rr=resultadosKO[d.id]||{};
+          const loc=base.local||rr.local, vis=base.visitante||rr.visitante;
+          // Calcular con el pronóstico de ESTE usuario (x), no con la global misPKO
+          const pts=_ptsKO(x, rr, loc, vis);
           if(pts!==null&&pts>0) puntos+=pts;
         });
       }catch(e){}
