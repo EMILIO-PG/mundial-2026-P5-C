@@ -257,10 +257,7 @@ html,body{overflow-x:hidden;max-width:100%}
 .qp-btn img{width:16px;height:11px;object-fit:cover;border:1px solid rgba(0,0,0,.1)}
 .pron-pts-ko{font-size:.56rem;color:var(--g3);text-align:center;margin-top:.3rem;line-height:1.4}
 .pron-pts-ko strong{color:var(--k)}
-.admin-qp-row{display:flex;gap:.3rem;margin-top:.4rem;flex-wrap:wrap}
-.admin-qp-btn{flex:1;padding:.3rem;border:1px solid var(--ln);background:var(--w);font-size:.6rem;font-weight:700;font-family:'Inter',sans-serif;cursor:pointer;color:var(--g4);transition:.1s}
-.admin-qp-btn.sel{background:var(--er);color:#fff;border-color:var(--er)}
-
+.admin-qp-hint{font-size:.58rem;color:var(--er);font-weight:700;padding:.3rem .5rem;background:#fff5f5;border-radius:2px;margin-top:.25rem;display:none}
 .admin-qp-section{margin-top:.4rem;background:#fff8f8;border:1px solid #fecaca;padding:.45rem .6rem;border-radius:2px}
 .admin-qp-label{font-size:.58rem;font-weight:800;color:var(--er);margin-bottom:.35rem;letter-spacing:.3px}
 .admin-qp-note{font-size:.52rem;color:var(--g3);margin-top:.3rem;line-height:1.35}
@@ -818,9 +815,10 @@ async function loadServerTime(){
 }
 
 let _usuariosCache=null, _usuariosCacheAt=0;
+const USUARIOS_TTL = 10 * 60 * 1000; // 10 minutos — reduce lecturas ~90% vs 1 min
 async function getUsuarios(force){
   const ahora=Date.now();
-  if(!force && _usuariosCache && (ahora-_usuariosCacheAt)<60000) return _usuariosCache;
+  if(!force && _usuariosCache && (ahora-_usuariosCacheAt)<USUARIOS_TTL) return _usuariosCache;
   const snap=await db.collection('usuarios').orderBy('puntos','desc').get();
   _usuariosCache=snap.docs.map(d=>({id:d.id,...d.data()}));
   _usuariosCacheAt=ahora;
@@ -910,7 +908,14 @@ async function seedPartidos(){
   }catch(e){console.error('seedPartidos:',e);}
 }
 async function loadResultados(){
-  try{ const s=await db.collection('resultados').get(); s.forEach(d=>resultados[d.id]=d.data()); }catch(e){}
+  try{
+    // Intentar leer desde sessionStorage primero (la fase de grupos terminó, no cambian más)
+    const cached=sessionStorage.getItem('wc26_resultados');
+    if(cached){ resultados=JSON.parse(cached); return; }
+    const s=await db.collection('resultados').get();
+    s.forEach(d=>resultados[d.id]=d.data());
+    try{ sessionStorage.setItem('wc26_resultados',JSON.stringify(resultados)); }catch(e){}
+  }catch(e){}
 }
 async function loadMisP(){
   try{ const s=await db.collection('pronosticos').doc(CU.uid).collection('partidos').get(); s.forEach(d=>misP[d.id]=d.data()); }catch(e){}
@@ -926,7 +931,13 @@ async function loadFFBracket(){
   try{ const d=await db.collection('usuarios').doc(CU.uid).collection('meta').doc('ffBracket').get(); if(d.exists&&d.data().win) ffWin=d.data().win; }catch(e){}
 }
 async function loadResultadosKO(){
-  try{ const s=await db.collection('resultadosKO').get(); s.forEach(d=>resultadosKO[d.id]=d.data()); }catch(e){}
+  try{
+    const cached=sessionStorage.getItem('wc26_resultadosKO');
+    if(cached){ resultadosKO=JSON.parse(cached); return; }
+    const s=await db.collection('resultadosKO').get();
+    s.forEach(d=>resultadosKO[d.id]=d.data());
+    try{ sessionStorage.setItem('wc26_resultadosKO',JSON.stringify(resultadosKO)); }catch(e){}
+  }catch(e){}
 }
 async function loadMisPronosKO(){
   try{ const s=await db.collection('pronosticosKO').doc(CU.uid).collection('partidos').get(); s.forEach(d=>misPKO[d.id]=d.data()); }catch(e){}
@@ -1195,6 +1206,9 @@ function cardKO(p){
   let adminHTML='';
   if(isAdmin){
     const rv=r&&r.terminado, qpAdm=rv?r.quienPasa:'';
+    // Inicializar ADM_QP_STATE desde el resultado guardado para que persista entre re-renders
+    if(qpAdm && !ADM_QP_STATE[pid]) ADM_QP_STATE[pid]=qpAdm;
+    const qpEfectivo=ADM_QP_STATE[pid]||qpAdm;
     adminHTML=`<div class="admin-box"><div class="admin-title">⚙️ Admin — Resultado KO</div>
     <div class="admin-row">
       <input class="ai adko-l" type="number" min="0" max="20" placeholder="L" value="${rv?r.gl:''}" oninput="onAdmKOChange(this,'${pid}')"/>
@@ -1203,14 +1217,14 @@ function cardKO(p){
       <label class="admin-lbl"><input type="checkbox" class="adko-t" ${rv?'checked':''}/> Final</label>
     </div>
     <div class="admin-qp-section">
-      <div class="admin-qp-label" id="admhint-${pid}">⚠️ Si hubo empate → elegí quién pasó a la siguiente ronda:</div>
+      <div class="admin-qp-label">⚠️ Si hubo empate → elegí quién pasó a la siguiente ronda:</div>
       <div class="admin-qp-row" id="admqp-${pid}">
-        <button class="admin-qp-btn${qpAdm==='local'?' sel':''}" id="admqpl-${pid}" onclick="setAdmQP('${pid}','local')">${p.local}</button>
-        <button class="admin-qp-btn${qpAdm==='visitante'?' sel':''}" id="admqpv-${pid}" onclick="setAdmQP('${pid}','visitante')">${p.visitante}</button>
+        <button type="button" class="admin-qp-btn${qpEfectivo==='local'?' sel':''}" id="admqpl-${pid}" onclick="setAdmQP('${pid}','local')">${p.local}</button>
+        <button type="button" class="admin-qp-btn${qpEfectivo==='visitante'?' sel':''}" id="admqpv-${pid}" onclick="setAdmQP('${pid}','visitante')">${p.visitante}</button>
       </div>
-      <div class="admin-qp-note">Si el marcador no es empate, ignorar esta sección — se detecta automáticamente.</div>
+      <div class="admin-qp-note">Si hay ganador en 90 min, ignorar esta sección — se detecta automáticamente.</div>
     </div>
-    <div class="admin-row" style="margin-top:.35rem"><button class="admin-save" onclick="guardarResKO(this,'${p.id}','${pid}')">Guardar KO</button></div></div>`;
+    <div class="admin-row" style="margin-top:.35rem"><button type="button" class="admin-save" onclick="guardarResKO(this,'${p.id}','${pid}')">Guardar KO</button></div></div>`;
   }
   const borde=esEcu?' style="border-left:3px solid var(--eb)"':'';
   return `<div class="pc"${borde}>
@@ -1337,6 +1351,8 @@ async function guardarResKO(btn,matchId,pid){
   try{
     await db.collection('resultadosKO').doc(matchId).set(data);
     resultadosKO[matchId]=data;
+    // Invalidar sessionStorage para que otros usuarios recarguen los resultados
+    sessionStorage.removeItem('wc26_resultadosKO');
     if(ganador&&typeof TODOS_KO!=='undefined'){
       const sig=TODOS_KO.find(p=>p.ganadorDe?.local===matchId||p.ganadorDe?.visitante===matchId);
       if(sig){
@@ -1498,21 +1514,36 @@ async function calcPtsGruposTodos(){
 
 async function calcPtsTodosKO(matchId, partido){
   if(!partido||!partido.local||!partido.visitante) return;
+  const real=resultadosKO[matchId];
+  if(!real||!real.terminado) return;
+  const esEcu = partido.local==='Ecuador'||partido.visitante==='Ecuador';
   try{
-    const users=await db.collection('usuarios').get();
+    // Usamos la lista cacheada de usuarios (getUsuarios) en vez de un .get() fresco
+    // para no gastar lecturas extra si la caché está vigente (TTL 10 min).
+    const lista=await getUsuarios();
     const batch=db.batch();
-    for(const ud of users.docs){
-      const uid=ud.id;
+    let cambios=0;
+    for(const u of lista){
+      const uid=u.id;
       const ref=db.collection('pronosticosKO').doc(uid).collection('partidos').doc(matchId);
-      const snap=await ref.get();
+      const snap=await ref.get(); // 1 lectura por usuario — es la única lectura necesaria
       if(!snap.exists) continue;
       const pr=snap.data();
       if(pr.gl===undefined||pr.gv===undefined) continue;
-      const pts=calcPtsKO(matchId,partido.local,partido.visitante);
-      batch.set(ref,{pts:pts||0,calculado:true},{merge:true});
+      const ptsNuevos=calcularPuntosKO({gl:pr.gl,gv:pr.gv,quienPasa:pr.quienPasa},{gl:real.gl,gv:real.gv,quienPasa:real.quienPasa},esEcu)||0;
+      const ptsAnteriores=pr.pts||0;
+      const delta=ptsNuevos-ptsAnteriores;
+      batch.set(ref,{pts:ptsNuevos,calculado:true},{merge:true});
+      // ✅ Solo SUMAMOS la diferencia al total — sin releer pronosticos/grupos/KO
+      // completos de cada usuario (eso era lo carísimo de recalcularTotalesCompleto).
+      if(delta!==0){
+        batch.update(db.collection('usuarios').doc(uid),{puntos:firebase.firestore.FieldValue.increment(delta)});
+        cambios++;
+      }
     }
     await batch.commit();
-    await recalcularTotalesCompleto();
+    invalidarUsuarios();
+    console.log(`Puntos KO actualizados: ${cambios} usuario(s) con cambio de puntaje en ${matchId}`);
   }catch(e){ console.error('Error calcPtsTodosKO:',e); }
 }
 
@@ -1574,8 +1605,14 @@ async function recalcularTotalesCompleto(){
           if(x.gl===undefined) return;
           const partido=(typeof TODOS_KO!=='undefined')?TODOS_KO.find(p=>p.id===d.id):null;
           if(!partido) return;
-          const pts=calcPtsKO(d.id,partido.local,partido.visitante);
-          if(pts!==null&&pts>0) puntos+=pts;
+          const real=resultadosKO[d.id];
+          if(!real||!real.terminado) return;
+          // ✅ FIX: usar calcularPuntosKO con el pronóstico DE ESTE USUARIO (x)
+          // y el resultado real, NO calcPtsKO que usaba la variable global
+          // misPKO (siempre el pronóstico del admin que ejecuta esta función).
+          const esEcu = partido.local==='Ecuador'||partido.visitante==='Ecuador';
+          const pts=calcularPuntosKO({gl:x.gl,gv:x.gv,quienPasa:x.quienPasa},{gl:real.gl,gv:real.gv,quienPasa:real.quienPasa},esEcu);
+          if(pts>0) puntos+=pts;
         });
       }catch(e){}
       batch.update(db.collection('usuarios').doc(uid),{puntos,aciertos,stExactos:ex,stCorrectos:co,stFallas:fa,stHechos:he});
@@ -2147,7 +2184,11 @@ async function renderRanking(){
     const lista=await getUsuarios();
     const top=lista.slice(0,50);
     if(top.length===0){cont.innerHTML='<div class="empty-state">Aún no hay jugadores registrados.</div>';return;}
-    let h=`<div class="rhead"><h3>Tabla de líderes — Contraloría Mundial 2026</h3><span>${top.length} jugadores</span></div>`;
+    let h='';
+    if(isAdmin){
+      h+=`<button class="sync-btn" type="button" style="background:var(--er);margin-bottom:1rem" onclick="if(confirm('¿Recalcular TODOS los puntos de TODOS los usuarios? Usa esto si el ranking no coincide con los puntos reales.'))forzarRecalculoTotal()">⚙️ Admin — Recalcular TODOS los puntos (fix ranking)</button>`;
+    }
+    h+=`<div class="rhead"><h3>Tabla de líderes — Contraloría Mundial 2026</h3><span>${top.length} jugadores</span></div>`;
     let pos=1;
     top.forEach(u=>{
       const me=u.id===CU.uid;
@@ -2159,6 +2200,14 @@ async function renderRanking(){
     });
     cont.innerHTML=h;
   }catch(e){cont.innerHTML='<div class="empty-state" style="color:var(--er)">Error al cargar el ranking.</div>';}
+}
+async function forzarRecalculoTotal(){
+  if(!isAdmin) return;
+  toast('Recalculando todos los puntos... esto puede tardar.','info');
+  await recalcularTotalesCompleto();
+  invalidarUsuarios();
+  await renderRanking();
+  toast('✅ Ranking corregido con los puntos reales de cada usuario.','ok');
 }
 
 function toast(msg,type='ok'){
@@ -2183,6 +2232,6 @@ setInterval(() => {
   }
 }, 30000);
 </script>
-<div style="text-align:center;padding:.5rem;font-size:.55rem;color:#bbb;letter-spacing:1px">v3.2</div>
+<div style="text-align:center;padding:.5rem;font-size:.55rem;color:#bbb;letter-spacing:1px">v3.5</div>
 </body>
 </html>
