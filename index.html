@@ -686,7 +686,7 @@ html,body{overflow-x:hidden;max-width:100%}
       <div id="admin-sync" style="display:none;margin-bottom:1rem">
         <button class="sync-btn" type="button" onclick="sincronizarResultados()">🔄 Sincronizar resultados desde la API</button>
         <div class="sync-hint">Trae solo partidos finalizados. Te muestra la lista y tú confirmas antes de guardar.</div>
-        <button class="sync-btn" type="button" style="margin-top:.5rem" onclick="adminRecalcularTodo()">🧮 Recalcular totales y estadísticas</button>
+        <button class="sync-btn" type="button" id="btnRecalcular" style="margin-top:.5rem" onclick="adminRecalcularTodo()">🧮 Recalcular totales y estadísticas</button>
         <div class="sync-hint">Recalcula puntos y stats (grupos + fase final) de TODOS los jugadores y refresca el ranking al instante.</div>
       </div>
       <div id="hoy-content"></div>
@@ -1649,15 +1649,52 @@ async function adminRecalcularTodo(){
   toast('Recalculando totales y estadísticas de todos...','info');
   await recalcularTotalesCompleto();
 }
+let _recalculando=false;
 async function recalcularTotalesCompleto(){
+  if(_recalculando){ toast('Ya hay un recálculo en curso, esperá a que termine.','info'); return {ok:0,fail:0,errores:[],skipped:true}; }
+  const todosKoOk = typeof TODOS_KO!=='undefined' && Array.isArray(TODOS_KO) && TODOS_KO.length>0;
+  if(!todosKoOk) console.warn('recalcularTotalesCompleto: TODOS_KO no está definido o vacío (¿falló data/partidos_ko.js?). Se recalculan grupos; NO se tocan los campos de fase final para no pisarlos con ceros.');
+  _recalculando=true;
+  const btn=document.getElementById('btnRecalcular');
+  if(btn){ btn.disabled=true; btn.textContent='🧮 Recalculando…'; }
+  let total=0;
   try{
     const users=await db.collection('usuarios').get();
+    total=users.docs.length;
+    toast(`Recalculando ${total} usuarios…`,'info');
     const batch=db.batch();
-    const filas=[]; // para actualizar la caché en memoria y re-pintar el ranking al instante
-    for(const ud of users.docs){
+    const errores=[];
+    let completados=0;
+    const marcarProgreso=()=>{ completados++; if(completados%10===0||completados===total) toast(`Recalculando… ${completados}/${total}`,'info'); };
+
+    const tareas=users.docs.map(async(ud)=>{
       const uid=ud.id;
       const udata=ud.data()||{};
-      const partsSnap=await db.collection('pronosticos').doc(uid).collection('partidos').get();
+      const nombre=udata.nombre||udata.email||uid;
+
+      // Lecturas en paralelo (antes eran 2-3 awaits secuenciales por usuario).
+      // Se guarda la colección de cada lectura para poder señalar EXACTAMENTE
+      // cuál falló (ej. permission-denied en pronosticosKO) en vez de tragarse el error.
+      const lecturas=[
+        {key:'pronosticos', p:db.collection('pronosticos').doc(uid).collection('partidos').get()},
+        {key:'pronosticosGrupos', p:db.collection('pronosticosGrupos').doc(uid).collection('grupos').get()}
+      ];
+      if(todosKoOk) lecturas.push({key:'pronosticosKO', p:db.collection('pronosticosKO').doc(uid).collection('partidos').get()});
+
+      const settled=await Promise.allSettled(lecturas.map(l=>l.p));
+      const idxFallo=settled.findIndex(s=>s.status==='rejected');
+      if(idxFallo!==-1){
+        // Si CUALQUIER lectura de este usuario falla, no escribimos NADA para él:
+        // mejor dejar sus valores actuales (probablemente correctos) que pisarlos
+        // con ceros por una lectura que no se pudo hacer.
+        const err=settled[idxFallo].reason;
+        errores.push({uid, nombre, coleccion:lecturas[idxFallo].key, code:err?.code||'?', message:err?.message||String(err)});
+        marcarProgreso();
+        return {ok:false, uid, nombre};
+      }
+
+      const partsSnap=settled[0].value, grSnap=settled[1].value, koSnap=todosKoOk?settled[2].value:null;
+
       let puntos=0, aciertos=0, ex=0, co=0, fa=0, he=0;
       partsSnap.forEach(d=>{
         const x=d.data();
@@ -1672,49 +1709,85 @@ async function recalcularTotalesCompleto(){
         const ok=(res.local>res.visitante&&pl>pv)||(res.visitante>res.local&&pv>pl)||(res.local===res.visitante&&pl===pv);
         if(ok) co++; else fa++;
       });
+
       // Clasificados de grupo
       let clasPts=0, clasAciertos=0, clasEval=0;
-      try{
-        const grSnap=await db.collection('pronosticosGrupos').doc(uid).collection('grupos').get();
-        grSnap.forEach(d=>{ const p=d.data().pts||0; clasEval++; if(p>0) clasAciertos++; clasPts+=p; puntos+=p; });
-      }catch(e){}
-      // Fase final (KO)
-      let koHechos=0, koExactos=0, koAciertos=0, koFallas=0, koPts=0;
-      try{
-        const koSnap=await db.collection('pronosticosKO').doc(uid).collection('partidos').get();
+      grSnap.forEach(d=>{ const p=d.data().pts||0; clasEval++; if(p>0) clasAciertos++; clasPts+=p; puntos+=p; });
+
+      const tot={puntos,aciertos,stExactos:ex,stCorrectos:co,stFallas:fa,stHechos:he,
+        stClasPts:clasPts,stClasAciertos:clasAciertos,stClasEval:clasEval};
+
+      // Fase final (KO) — solo si TODOS_KO cargó bien. Si no, se omiten estos campos
+      // del update en vez de escribirlos en 0 (ver todosKoOk arriba).
+      if(todosKoOk){
+        let koHechos=0, koExactos=0, koAciertos=0, koFallas=0, koPts=0;
         koSnap.forEach(d=>{
           const x=d.data();
           if(x.gl===undefined) return;
           koHechos++;
-          const base=(typeof TODOS_KO!=='undefined')?TODOS_KO.find(p=>p.id===d.id):null;
+          const base=TODOS_KO.find(p=>p.id===d.id);
           if(!base) return;
-          // Enriquecer equipos (R16+ tienen local/visitante null hasta propagar el ganador)
           const rr=resultadosKO[d.id]||{};
           const loc=base.local||rr.local, vis=base.visitante||rr.visitante;
-          // Calcular con el pronóstico de ESTE usuario (x), no con la global misPKO
           const pts=_ptsKO(x, rr, loc, vis);
           if(pts===null) return;
           koPts+=pts;
           if(pts>0){ puntos+=pts; koAciertos++; if(+x.gl===+rr.gl&&+x.gv===+rr.gv) koExactos++; }
           else koFallas++;
         });
-      }catch(e){}
-      const tot={puntos,aciertos,stExactos:ex,stCorrectos:co,stFallas:fa,stHechos:he,
-        stClasPts:clasPts,stClasAciertos:clasAciertos,stClasEval:clasEval,
-        stKoHechos:koHechos,stKoExactos:koExactos,stKoAciertos:koAciertos,stKoFallas:koFallas,stKoPts:koPts};
-      batch.update(db.collection('usuarios').doc(uid),tot);
-      filas.push({id:uid, nombre:udata.nombre, email:udata.email, admin:udata.admin, ...tot});
+        tot.puntos=puntos; // puntos puede haber crecido con koPts
+        tot.stKoHechos=koHechos; tot.stKoExactos=koExactos; tot.stKoAciertos=koAciertos; tot.stKoFallas=koFallas; tot.stKoPts=koPts;
+      }
+
+      marcarProgreso();
+      return {ok:true, uid, nombre, email:udata.email, admin:udata.admin, tot};
+    });
+
+    const procesados=await Promise.all(tareas);
+    const filas=[];
+    for(const r of procesados){
+      if(!r.ok) continue;
+      batch.update(db.collection('usuarios').doc(r.uid), r.tot);
+      filas.push({id:r.uid, nombre:r.nombre, email:r.email, admin:r.admin, ...r.tot});
     }
-    await batch.commit();
-    // Actualizar caché en memoria con los totales recién calculados (0 lecturas extra) y re-pintar YA
-    _usuariosCache=filas.sort((a,b)=>(b.puntos||0)-(a.puntos||0));
-    _usuariosCacheAt=Date.now();
-    if(CUD){ const yo=_usuariosCache.find(u=>u.id===CU.uid); if(yo){ CUD.puntos=yo.puntos; CUD.aciertos=yo.aciertos; } }
+    if(filas.length>0) await batch.commit();
+
+    // Actualizar caché en memoria y re-pintar el ranking al instante.
+    // Solo confiamos en `filas` como universo completo si TODOS los usuarios
+    // se recalcularon sin error Y con fase final incluida; si no, invalidamos
+    // para forzar una lectura fresca y completa (en vez de mostrar un ranking
+    // parcial o con campos de fase final desactualizados).
+    if(errores.length===0 && todosKoOk){
+      _usuariosCache=filas.sort((a,b)=>(b.puntos||0)-(a.puntos||0));
+      _usuariosCacheAt=Date.now();
+    }else{
+      invalidarUsuarios();
+    }
+    if(CUD){ const yo=filas.find(u=>u.id===CU.uid); if(yo){ CUD.puntos=yo.puntos; CUD.aciertos=yo.aciertos; } }
     await loadMisGrupos(true); // refrescar puntos de grupos del usuario actual
     updateTopPts(); renderInicio();
     if(typeof renderRanking==='function') renderRanking();
-    toast('Totales y ranking actualizados ✅','ok');
-  }catch(e){ console.error('Error recalcularTotalesCompleto:',e); }
+
+    if(errores.length){
+      console.group(`⚠️ recalcularTotalesCompleto: ${errores.length}/${total} usuario(s) con error de lectura`);
+      console.table(errores);
+      console.groupEnd();
+    }
+    const permisos=errores.filter(e=>e.code==='permission-denied').length;
+    if(!todosKoOk){
+      toast(`⚠️ Grupos OK (${filas.length}/${total}). Fase final NO recalculada: TODOS_KO no cargó (ver consola).`,'err');
+    }else if(errores.length===0){
+      toast(`Totales y ranking actualizados ✅ (${filas.length}/${total})`,'ok');
+    }else if(permisos>0){
+      toast(`⚠️ ${filas.length}/${total} OK. ${permisos} sin PERMISO de lectura — revisá las reglas de Firestore (ver consola).`,'err');
+    }else{
+      toast(`⚠️ ${filas.length}/${total} OK. ${errores.length} con error — ver consola.`,'err');
+    }
+    return {ok:filas.length, fail:errores.length, errores, todosKoOk};
+  }catch(e){ console.error('Error crítico en recalcularTotalesCompleto:',e); toast('❌ Error crítico al recalcular: '+(e.message||e),'err'); return {ok:0, fail:total, errores:[{code:e.code||'?', message:e.message||String(e)}]}; }finally{
+    _recalculando=false;
+    if(btn){ btn.disabled=false; btn.textContent='🧮 Recalcular totales y estadísticas'; }
+  }
 }
 
 function renderInicio(){
