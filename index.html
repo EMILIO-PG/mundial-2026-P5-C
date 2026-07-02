@@ -117,6 +117,10 @@ html,body{overflow-x:hidden;max-width:100%}
 .cn-l{font-size:.52rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--g3)}
 .cn-foot{padding:.65rem;background:var(--bg);border-top:1px solid var(--ln);font-size:.68rem;color:var(--g4);text-align:center}
 .cn-foot strong{color:var(--k);font-weight:900}
+.cn-sec-lbl{padding:.5rem .75rem;background:var(--pl);border-top:1px solid var(--ln);font-size:.6rem;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--p2)}
+.cn-sec-lbl.ko{background:#fff7d6;color:#8a6d00}
+.cn-clas{padding:.55rem .75rem;border-top:1px solid var(--ln);font-size:.66rem;color:var(--g4);text-align:center}
+.cn-clas strong{color:var(--k);font-weight:900}
 /* Modal perfil ajeno */
 .pf-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;align-items:center;justify-content:center;padding:1rem}
 .pf-overlay.show{display:flex}
@@ -257,7 +261,6 @@ html,body{overflow-x:hidden;max-width:100%}
 .qp-btn img{width:16px;height:11px;object-fit:cover;border:1px solid rgba(0,0,0,.1)}
 .pron-pts-ko{font-size:.56rem;color:var(--g3);text-align:center;margin-top:.3rem;line-height:1.4}
 .pron-pts-ko strong{color:var(--k)}
-.admin-qp-hint{font-size:.58rem;color:var(--er);font-weight:700;padding:.3rem .5rem;background:#fff5f5;border-radius:2px;margin-top:.25rem;display:none}
 .admin-qp-section{margin-top:.4rem;background:#fff8f8;border:1px solid #fecaca;padding:.45rem .6rem;border-radius:2px}
 .admin-qp-label{font-size:.58rem;font-weight:800;color:var(--er);margin-bottom:.35rem;letter-spacing:.3px}
 .admin-qp-note{font-size:.52rem;color:var(--g3);margin-top:.3rem;line-height:1.35}
@@ -800,6 +803,15 @@ function ahoraReal(){
   return new Date(SERVER_NOW.getTime()+(Date.now()-SERVER_NOW_LOADED_AT));
 }
 async function loadServerTime(){
+  // Si ya tenemos el offset servidor↔local de esta sesión, lo reutilizamos (0 lecturas)
+  try{
+    const off=sessionStorage.getItem('wc26_srvOffset');
+    if(off!==null){
+      SERVER_NOW=new Date(Date.now()+parseInt(off,10));
+      SERVER_NOW_LOADED_AT=Date.now();
+      return;
+    }
+  }catch(e){}
   try{
     await db.collection('_clock').doc('now').set({t:firebase.firestore.FieldValue.serverTimestamp()});
   }catch(e){ console.warn('_clock write:',e?.code||e); }
@@ -808,6 +820,7 @@ async function loadServerTime(){
     if(doc.exists&&doc.data().t){
       SERVER_NOW=doc.data().t.toDate();
       SERVER_NOW_LOADED_AT=Date.now();
+      try{ sessionStorage.setItem('wc26_srvOffset', String(SERVER_NOW.getTime()-Date.now())); }catch(e){}
       return;
     }
     SERVER_NOW=null; SERVER_NOW_LOADED_AT=null;
@@ -815,7 +828,7 @@ async function loadServerTime(){
 }
 
 let _usuariosCache=null, _usuariosCacheAt=0;
-const USUARIOS_TTL = 10 * 60 * 1000; // 10 minutos — reduce lecturas ~90% vs 1 min
+const USUARIOS_TTL = 2 * 60 * 1000; // 2 minutos — balance entre lecturas y frescura del ranking
 async function getUsuarios(force){
   const ahora=Date.now();
   if(!force && _usuariosCache && (ahora-_usuariosCacheAt)<USUARIOS_TTL) return _usuariosCache;
@@ -917,14 +930,24 @@ async function loadResultados(){
     try{ sessionStorage.setItem('wc26_resultados',JSON.stringify(resultados)); }catch(e){}
   }catch(e){}
 }
+function cacheMisP(){ try{ if(CU) sessionStorage.setItem('wc26_misP_'+CU.uid, JSON.stringify(misP)); }catch(e){} }
+function cacheMisPKO(){ try{ if(CU) sessionStorage.setItem('wc26_misPKO_'+CU.uid, JSON.stringify(misPKO)); }catch(e){} }
 async function loadMisP(){
-  try{ const s=await db.collection('pronosticos').doc(CU.uid).collection('partidos').get(); s.forEach(d=>misP[d.id]=d.data()); }catch(e){}
+  try{
+    const c=sessionStorage.getItem('wc26_misP_'+CU.uid);
+    if(c){ misP=JSON.parse(c)||{}; return; }
+    const s=await db.collection('pronosticos').doc(CU.uid).collection('partidos').get();
+    s.forEach(d=>misP[d.id]=d.data());
+    cacheMisP();
+  }catch(e){}
 }
 async function actualizarMiContador(){
   if(!CU) return;
   let he=0;
   Object.keys(misP).forEach(k=>{ const x=misP[k]; if(x&&x.local!==undefined&&x.visitante!==undefined) he++; });
+  const prev=CUD?CUD.stHechos:undefined;
   if(CUD) CUD.stHechos=he;
+  if(prev===he) return; // sin cambios → no gastamos una escritura
   try{ await db.collection('usuarios').doc(CU.uid).update({stHechos:he}); }catch(e){}
 }
 async function loadFFBracket(){
@@ -940,7 +963,13 @@ async function loadResultadosKO(){
   }catch(e){}
 }
 async function loadMisPronosKO(){
-  try{ const s=await db.collection('pronosticosKO').doc(CU.uid).collection('partidos').get(); s.forEach(d=>misPKO[d.id]=d.data()); }catch(e){}
+  try{
+    const c=sessionStorage.getItem('wc26_misPKO_'+CU.uid);
+    if(c){ misPKO=JSON.parse(c)||{}; return; }
+    const s=await db.collection('pronosticosKO').doc(CU.uid).collection('partidos').get();
+    s.forEach(d=>misPKO[d.id]=d.data());
+    cacheMisPKO();
+  }catch(e){}
 }
 async function loadMisGrupos(){
   try{ const s=await db.collection('pronosticosGrupos').doc(CU.uid).collection('grupos').get(); s.forEach(d=>{ misGrupos[d.id]=d.data(); }); }catch(e){}
@@ -1007,24 +1036,32 @@ function calcPts(pid,local,vis){
   if(esEcu){ const ecuG=(local==='Ecuador'&&lG)||(vis==='Ecuador'&&vG); if(ecuG&&ex) return PUNTOS.ECUADOR_MARCADOR_EXACTO; return PUNTOS.ECUADOR_RESULTADO_CORRECTO; }
   return ex?PUNTOS.MARCADOR_EXACTO:PUNTOS.RESULTADO_CORRECTO;
 }
-function calcPtsKO(pid,local,vis){
-  const r=resultadosKO[pid], pr=misPKO[pid];
+// Función pura de puntaje KO: recibe el pronóstico (pr) y el resultado (r) explícitos.
+// NO lee variables globales, por eso sirve para calcular el puntaje de CUALQUIER usuario.
+function _ptsKO(pr, r, local, vis){
   if(!r||!r.terminado||!pr||pr.gl===undefined||pr.gv===undefined) return null;
   const mult=(local==='Ecuador'||vis==='Ecuador')?2:1;
   const gl=+pr.gl, gv=+pr.gv, rl=+r.gl, rv=+r.gv;
   if(isNaN(gl)||isNaN(gv)||isNaN(rl)||isNaN(rv)) return 0;
+  // Quién avanzó realmente: si el partido real fue empate → r.quienPasa (penales);
+  // si hubo ganador en 90' → ese ganador.
+  const avanzaReal = (rl===rv) ? r.quienPasa : (rl>rv?'local':'visitante');
+  // CASO marcador EXACTO
   if(gl===rl&&gv===rv){
-    if(rl===rv) return pr.quienPasa===r.quienPasa ? 300*mult : 200*mult;
-    return 300*mult;
+    if(rl===rv) return pr.quienPasa===r.quienPasa ? 300*mult : 200*mult; // empate exacto
+    return 300*mult;                                                     // resultado exacto con ganador
   }
+  // CASO el usuario predijo EMPATE (no exacto)
   if(gl===gv){
-    if(rl===rv) return pr.quienPasa===r.quienPasa ? 200*mult : 0;
-    const ganadorReal = rl>rv?'local':'visitante';
-    return pr.quienPasa===ganadorReal ? 100*mult : 0;
+    if(rl===rv) return pr.quienPasa===r.quienPasa ? 200*mult : 0;        // empate real: acertó quién pasa → 200
+    return pr.quienPasa===avanzaReal ? 100*mult : 0;                     // empate predicho pero hubo ganador: acertó quién avanza → 100
   }
+  // CASO el usuario predijo GANADOR (no exacto)
   const ganadorPred = gl>gv?'local':'visitante';
-  const ganadorReal = rl!==rv ? (rl>rv?'local':'visitante') : r.quienPasa;
-  return ganadorPred===ganadorReal ? 200*mult : 0;
+  return ganadorPred===avanzaReal ? 200*mult : 0;                        // acertó quién avanza → 200, si no → 0
+}
+function calcPtsKO(pid,local,vis){
+  return _ptsKO(misPKO[pid], resultadosKO[pid], local, vis);
 }
 function getCtx(pid){ return typeof CONTEXTO_PARTIDOS!=='undefined'?CONTEXTO_PARTIDOS.find(x=>x.id===pid):null; }
 
@@ -1191,8 +1228,8 @@ function cardKO(p){
   <div class="qp-wrap${empate?' show':''}" id="qpw-${pid}">
     <div class="qp-lbl">¿Quién avanza?</div>
     <div class="qp-row">
-      <button class="qp-btn${qpActual==='local'?' sel':''}${p.local==='Ecuador'?' ecuqp':''}" id="qpl-${pid}" ${bloq?'disabled':''} onclick="setQP('${pid}','local')">${BANDERAS[p.local]?`<img src="https://flagcdn.com/w40/${BANDERAS[p.local]}.png" alt=""/>`:''} ${p.local}</button>
-      <button class="qp-btn${qpActual==='visitante'?' sel':''}${p.visitante==='Ecuador'?' ecuqp':''}" id="qpr-${pid}" ${bloq?'disabled':''} onclick="setQP('${pid}','visitante')">${BANDERAS[p.visitante]?`<img src="https://flagcdn.com/w40/${BANDERAS[p.visitante]}.png" alt=""/>`:''} ${p.visitante}</button>
+      <button class="qp-btn${qpActual==='local'?' sel':''}${p.local==='Ecuador'?' ecuqp':''}" id="qpl-${pid}" ${bloq?'disabled':''} onclick="setQP(this,'${pid}','local')">${BANDERAS[p.local]?`<img src="https://flagcdn.com/w40/${BANDERAS[p.local]}.png" alt=""/>`:''} ${p.local}</button>
+      <button class="qp-btn${qpActual==='visitante'?' sel':''}${p.visitante==='Ecuador'?' ecuqp':''}" id="qpr-${pid}" ${bloq?'disabled':''} onclick="setQP(this,'${pid}','visitante')">${BANDERAS[p.visitante]?`<img src="https://flagcdn.com/w40/${BANDERAS[p.visitante]}.png" alt=""/>`:''} ${p.visitante}</button>
     </div>
   </div>
   <div class="pron-pts-ko">Exacto <strong>300</strong> · Resultado <strong>200</strong> · Empate+pasa <strong>100</strong>${esEcu?' · <strong>×2 Ecuador</strong>':''}</div>`;
@@ -1200,7 +1237,8 @@ function cardKO(p){
   else pronHTML+=`<button class="pbtn${btnC}" onclick="guardarKO(this,'${p.id}','${pid}')">Guardar pronóstico</button><div class="pron-aviso">✏️ Editable hasta el inicio del partido</div>`;
   if(pr&&pr.gl!==undefined){
     const who=sQP?` → pasa ${sQP==='local'?p.local:p.visitante}`:'';
-    pronHTML+=`<div class="pfeed">✓ ${sGL}–${sGV}${who}${pts!==null&&pts>0?` &nbsp;<span class="badge b-pts">+${pts} pts</span>`:''}</div>`;
+    const ptsTxt = pts===null ? '' : (pts>0 ? ` &nbsp;<span class="badge b-pts">+${pts} pts</span>` : ` &nbsp;<span class="badge b-line">0 pts</span>`);
+    pronHTML+=`<div class="pfeed">✓ ${sGL}–${sGV}${who}${ptsTxt}</div>`;
   }
   pronHTML+='</div>';
   let adminHTML='';
@@ -1239,15 +1277,19 @@ function cardKO(p){
 
 function onKOChange(input,pid){
   const card=input.closest('.pron');
-  const gl=parseInt(card?.querySelector('.pi-kl')?.value);
-  const gv=parseInt(card?.querySelector('.pi-kv')?.value);
-  const qpw=document.getElementById('qpw-'+pid);
+  if(!card) return;
+  const gl=parseInt(card.querySelector('.pi-kl')?.value);
+  const gv=parseInt(card.querySelector('.pi-kv')?.value);
+  // Buscar el qp-wrap DENTRO de esta card, no por id global (hay ids duplicados entre secciones)
+  const qpw=card.querySelector('.qp-wrap');
   if(qpw) qpw.classList.toggle('show', !isNaN(gl)&&!isNaN(gv)&&gl===gv);
 }
-function setQP(pid,slot){
+function setQP(btn,pid,slot){
   QP_STATE[pid]=slot;
-  document.getElementById('qpl-'+pid)?.classList.toggle('sel',slot==='local');
-  document.getElementById('qpr-'+pid)?.classList.toggle('sel',slot==='visitante');
+  // Actualizar la selección visual SOLO en la card clickeada (evita ids duplicados)
+  const row=btn.closest('.qp-row');
+  if(row) row.querySelectorAll('.qp-btn').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
 }
 function setAdmQP(pid,slot){
   ADM_QP_STATE[pid]=slot;
@@ -1289,13 +1331,21 @@ async function guardar(btn,pid,local,vis){
   if(!l||!v||l.value===''||v.value===''){toast('Ingresa ambos marcadores antes de guardar.','err');return;}
   const lv=parseInt(l.value), vv=parseInt(v.value);
   if(isNaN(lv)||isNaN(vv)||lv<0||vv<0){toast('Los marcadores deben ser números válidos.','err');return;}
+  const prev=misP[pid];
   const data={local:lv,visitante:vv,guardado:true,ts:firebase.firestore.FieldValue.serverTimestamp()};
-  try{
-    await db.collection('pronosticos').doc(CU.uid).collection('partidos').doc(pid).set(data);
-    misP[pid]=data; toast('¡Pronóstico guardado! ⚽','ok');
-    actualizarMiContador();
-    updateTopPts(); renderInicio(); renderHoy(); renderGrupos(); renderCalendario();
-  }catch(e){toast('Error al guardar. Verifica tu conexión.','err');}
+  // 1) UI inmediata (optimista)
+  misP[pid]=data; cacheMisP();
+  toast('¡Pronóstico guardado! ⚽','ok');
+  updateTopPts(); renderInicio(); renderHoy(); renderGrupos(); renderCalendario();
+  // 2) Persistir en segundo plano; si falla, revertimos
+  db.collection('pronosticos').doc(CU.uid).collection('partidos').doc(pid).set(data)
+    .then(()=>{ actualizarMiContador(); })
+    .catch(e=>{
+      if(prev===undefined) delete misP[pid]; else misP[pid]=prev;
+      cacheMisP();
+      updateTopPts(); renderHoy(); renderGrupos(); renderCalendario();
+      toast('No se pudo guardar. Revisa tu conexión e intenta de nuevo.','err');
+    });
 }
 
 async function guardarKO(btn,matchId,pid){
@@ -1313,12 +1363,20 @@ async function guardarKO(btn,matchId,pid){
   if(isNaN(gl)||isNaN(gv)||gl<0||gv<0){ toast('Marcadores inválidos.','err'); return; }
   const quienPasa = gl===gv ? (QP_STATE[pid]||null) : null;
   if(gl===gv&&!quienPasa){ toast('Es empate: selecciona quién avanza.','err'); return; }
+  const prev=misPKO[matchId];
   const data={gl,gv,quienPasa,guardado:true,ts:firebase.firestore.FieldValue.serverTimestamp()};
-  try{
-    await db.collection('pronosticosKO').doc(CU.uid).collection('partidos').doc(matchId).set(data);
-    misPKO[matchId]=data; toast('¡Pronóstico KO guardado! ⚽','ok');
-    updateTopPts(); renderInicio(); renderHoy(); renderCalendario(); renderFaseFinal();
-  }catch(e){ toast('Error al guardar: '+e.message,'err'); }
+  // 1) UI inmediata (optimista)
+  misPKO[matchId]=data; cacheMisPKO();
+  toast('¡Pronóstico KO guardado! ⚽','ok');
+  updateTopPts(); renderInicio(); renderHoy(); renderCalendario(); renderFaseFinal();
+  // 2) Persistir en segundo plano; si falla, revertimos
+  db.collection('pronosticosKO').doc(CU.uid).collection('partidos').doc(matchId).set(data)
+    .catch(e=>{
+      if(prev===undefined) delete misPKO[matchId]; else misPKO[matchId]=prev;
+      cacheMisPKO();
+      updateTopPts(); renderHoy(); renderCalendario(); renderFaseFinal();
+      toast('No se pudo guardar el KO. Revisa tu conexión e intenta de nuevo.','err');
+    });
 }
 
 async function guardarRes(btn,pid){
@@ -1514,40 +1572,31 @@ async function calcPtsGruposTodos(){
 
 async function calcPtsTodosKO(matchId, partido){
   if(!partido||!partido.local||!partido.visitante) return;
-  const real=resultadosKO[matchId];
-  if(!real||!real.terminado) return;
-  const esEcu = partido.local==='Ecuador'||partido.visitante==='Ecuador';
   try{
-    // Usamos la lista cacheada de usuarios (getUsuarios) en vez de un .get() fresco
-    // para no gastar lecturas extra si la caché está vigente (TTL 10 min).
-    const lista=await getUsuarios();
+    const users=await db.collection('usuarios').get();
     const batch=db.batch();
-    let cambios=0;
-    for(const u of lista){
-      const uid=u.id;
+    for(const ud of users.docs){
+      const uid=ud.id;
       const ref=db.collection('pronosticosKO').doc(uid).collection('partidos').doc(matchId);
-      const snap=await ref.get(); // 1 lectura por usuario — es la única lectura necesaria
+      const snap=await ref.get();
       if(!snap.exists) continue;
       const pr=snap.data();
       if(pr.gl===undefined||pr.gv===undefined) continue;
-      const ptsNuevos=calcularPuntosKO({gl:pr.gl,gv:pr.gv,quienPasa:pr.quienPasa},{gl:real.gl,gv:real.gv,quienPasa:real.quienPasa},esEcu)||0;
-      const ptsAnteriores=pr.pts||0;
-      const delta=ptsNuevos-ptsAnteriores;
-      batch.set(ref,{pts:ptsNuevos,calculado:true},{merge:true});
-      // ✅ Solo SUMAMOS la diferencia al total — sin releer pronosticos/grupos/KO
-      // completos de cada usuario (eso era lo carísimo de recalcularTotalesCompleto).
-      if(delta!==0){
-        batch.update(db.collection('usuarios').doc(uid),{puntos:firebase.firestore.FieldValue.increment(delta)});
-        cambios++;
-      }
+      // Calcular con el pronóstico REAL de este usuario (pr), no con la variable global
+      const pts=_ptsKO(pr, resultadosKO[matchId], partido.local, partido.visitante);
+      batch.set(ref,{pts:pts||0,calculado:true},{merge:true});
     }
     await batch.commit();
-    invalidarUsuarios();
-    console.log(`Puntos KO actualizados: ${cambios} usuario(s) con cambio de puntaje en ${matchId}`);
+    await recalcularTotalesCompleto();
   }catch(e){ console.error('Error calcPtsTodosKO:',e); }
 }
 
 async function recalcularTotales(users){
+  // Delegamos al recálculo completo: así los resultados de grupos también suman
+  // clasificados + KO correctamente (sin borrarlos) y refrescan el ranking al instante.
+  return recalcularTotalesCompleto();
+}
+async function _recalcularTotalesGruposLegacy(users){
   try{
     if(!users) users=await db.collection('usuarios').get();
     const batch=db.batch();
@@ -1577,8 +1626,10 @@ async function recalcularTotalesCompleto(){
   try{
     const users=await db.collection('usuarios').get();
     const batch=db.batch();
+    const filas=[]; // para actualizar la caché en memoria y re-pintar el ranking al instante
     for(const ud of users.docs){
       const uid=ud.id;
+      const udata=ud.data()||{};
       const partsSnap=await db.collection('pronosticos').doc(uid).collection('partidos').get();
       let puntos=0, aciertos=0, ex=0, co=0, fa=0, he=0;
       partsSnap.forEach(d=>{
@@ -1594,35 +1645,48 @@ async function recalcularTotalesCompleto(){
         const ok=(res.local>res.visitante&&pl>pv)||(res.visitante>res.local&&pv>pl)||(res.local===res.visitante&&pl===pv);
         if(ok) co++; else fa++;
       });
+      // Clasificados de grupo
+      let clasPts=0, clasAciertos=0, clasEval=0;
       try{
         const grSnap=await db.collection('pronosticosGrupos').doc(uid).collection('grupos').get();
-        grSnap.forEach(d=>{ puntos+=(d.data().pts||0); });
+        grSnap.forEach(d=>{ const p=d.data().pts||0; clasEval++; if(p>0) clasAciertos++; clasPts+=p; puntos+=p; });
       }catch(e){}
+      // Fase final (KO)
+      let koHechos=0, koExactos=0, koAciertos=0, koFallas=0, koPts=0;
       try{
         const koSnap=await db.collection('pronosticosKO').doc(uid).collection('partidos').get();
         koSnap.forEach(d=>{
           const x=d.data();
           if(x.gl===undefined) return;
-          const partido=(typeof TODOS_KO!=='undefined')?TODOS_KO.find(p=>p.id===d.id):null;
-          if(!partido) return;
-          const real=resultadosKO[d.id];
-          if(!real||!real.terminado) return;
-          // ✅ FIX: usar calcularPuntosKO con el pronóstico DE ESTE USUARIO (x)
-          // y el resultado real, NO calcPtsKO que usaba la variable global
-          // misPKO (siempre el pronóstico del admin que ejecuta esta función).
-          const esEcu = partido.local==='Ecuador'||partido.visitante==='Ecuador';
-          const pts=calcularPuntosKO({gl:x.gl,gv:x.gv,quienPasa:x.quienPasa},{gl:real.gl,gv:real.gv,quienPasa:real.quienPasa},esEcu);
-          if(pts>0) puntos+=pts;
+          koHechos++;
+          const base=(typeof TODOS_KO!=='undefined')?TODOS_KO.find(p=>p.id===d.id):null;
+          if(!base) return;
+          // Enriquecer equipos (R16+ tienen local/visitante null hasta propagar el ganador)
+          const rr=resultadosKO[d.id]||{};
+          const loc=base.local||rr.local, vis=base.visitante||rr.visitante;
+          // Calcular con el pronóstico de ESTE usuario (x), no con la global misPKO
+          const pts=_ptsKO(x, rr, loc, vis);
+          if(pts===null) return;
+          koPts+=pts;
+          if(pts>0){ puntos+=pts; koAciertos++; if(+x.gl===+rr.gl&&+x.gv===+rr.gv) koExactos++; }
+          else koFallas++;
         });
       }catch(e){}
-      batch.update(db.collection('usuarios').doc(uid),{puntos,aciertos,stExactos:ex,stCorrectos:co,stFallas:fa,stHechos:he});
+      const tot={puntos,aciertos,stExactos:ex,stCorrectos:co,stFallas:fa,stHechos:he,
+        stClasPts:clasPts,stClasAciertos:clasAciertos,stClasEval:clasEval,
+        stKoHechos:koHechos,stKoExactos:koExactos,stKoAciertos:koAciertos,stKoFallas:koFallas,stKoPts:koPts};
+      batch.update(db.collection('usuarios').doc(uid),tot);
+      filas.push({id:uid, nombre:udata.nombre, email:udata.email, admin:udata.admin, ...tot});
     }
     await batch.commit();
-    invalidarUsuarios();
-    await loadUD(); // refrescar CUD con nuevos puntos
-    await loadMisGrupos(); // refrescar puntos de grupos del usuario actual
-    updateTopPts(); renderInicio(); if(typeof renderRanking==='function') renderRanking();
-    toast('Totales actualizados ✅','ok');
+    // Actualizar caché en memoria con los totales recién calculados (0 lecturas extra) y re-pintar YA
+    _usuariosCache=filas.sort((a,b)=>(b.puntos||0)-(a.puntos||0));
+    _usuariosCacheAt=Date.now();
+    if(CUD){ const yo=_usuariosCache.find(u=>u.id===CU.uid); if(yo){ CUD.puntos=yo.puntos; CUD.aciertos=yo.aciertos; } }
+    await loadMisGrupos(true); // refrescar puntos de grupos del usuario actual
+    updateTopPts(); renderInicio();
+    if(typeof renderRanking==='function') renderRanking();
+    toast('Totales y ranking actualizados ✅','ok');
   }catch(e){ console.error('Error recalcularTotalesCompleto:',e); }
 }
 
@@ -1652,8 +1716,14 @@ async function renderInicioCarnet(){
 }
 
 function carnetHTML(o){
-  const evaluados=o.exactos+o.correctos+o.fallas;
-  const pct=evaluados?Math.round(((o.exactos+o.correctos)/evaluados)*100):0;
+  // Fase de grupos
+  const gEval=(o.exactos||0)+(o.correctos||0)+(o.fallas||0);
+  const gPct=gEval?Math.round((((o.exactos||0)+(o.correctos||0))/gEval)*100):0;
+  const clasEval=o.clasEval||0;
+  // Fase final (KO) — puntaje distinto, se muestra aparte
+  const koHechos=o.koHechos||0;
+  const koEval=(o.koAciertos||0)+(o.koFallas||0);
+  const koPct=koEval?Math.round(((o.koAciertos||0)/koEval)*100):0;
   return `<div class="carnet">
     <div class="cn-head">
       <div class="cn-av">${(o.nombre||'?').charAt(0).toUpperCase()}</div>
@@ -1662,17 +1732,30 @@ function carnetHTML(o){
         <div class="cn-sub">${o.puntos||0} pts${o.puesto?` · puesto ${o.puesto} de ${o.total}`:''}</div>
       </div>
     </div>
+
+    <div class="cn-sec-lbl">⚽ Fase de grupos</div>
     <div class="cn-grid">
-      <div class="cn-st"><span class="cn-n ok">${o.exactos}</span><span class="cn-l">Marcador exacto 🎯</span></div>
-      <div class="cn-st"><span class="cn-n mid">${o.correctos}</span><span class="cn-l">Resultado correcto ✓</span></div>
-      <div class="cn-st"><span class="cn-n bad">${o.fallas}</span><span class="cn-l">Fallas ✗</span></div>
-      <div class="cn-st"><span class="cn-n">${pct}%</span><span class="cn-l">Efectividad (${evaluados} eval.)</span></div>
+      <div class="cn-st"><span class="cn-n ok">${o.exactos||0}</span><span class="cn-l">Marcador exacto 🎯</span></div>
+      <div class="cn-st"><span class="cn-n mid">${o.correctos||0}</span><span class="cn-l">Resultado correcto ✓</span></div>
+      <div class="cn-st"><span class="cn-n bad">${o.fallas||0}</span><span class="cn-l">Fallas ✗</span></div>
+      <div class="cn-st"><span class="cn-n">${gPct}%</span><span class="cn-l">Efectividad (${gEval} eval.)</span></div>
     </div>
-    <div class="cn-foot">⚽ <strong>${o.hechos}</strong> pronósticos realizados</div>
+    ${clasEval?`<div class="cn-clas">🥇 Clasificados: <strong>${o.clasAciertos||0}/${clasEval}</strong> grupos acertados · <strong>${o.clasPts||0}</strong> pts</div>`:''}
+
+    <div class="cn-sec-lbl ko">🏆 Fase final · KO (puntaje 300/200/100 · ×2 Ecuador)</div>
+    ${koHechos?`<div class="cn-grid">
+      <div class="cn-st"><span class="cn-n ok">${o.koExactos||0}</span><span class="cn-l">Marcador exacto 🎯</span></div>
+      <div class="cn-st"><span class="cn-n mid">${o.koAciertos||0}</span><span class="cn-l">Aciertos ✓</span></div>
+      <div class="cn-st"><span class="cn-n bad">${o.koFallas||0}</span><span class="cn-l">Fallas ✗</span></div>
+      <div class="cn-st"><span class="cn-n">${o.koPts||0}</span><span class="cn-l">Puntos KO (${koPct}% efec.)</span></div>
+    </div>`:`<div class="cn-clas" style="color:var(--g3)">Aún sin pronósticos de fase final.</div>`}
+
+    <div class="cn-foot">⚽ <strong>${o.hechos||0}</strong> pronósticos en grupos · 🏆 <strong>${koHechos}</strong> en fase final</div>
   </div>`;
 }
 
 function misStatsLive(){
+  // ── FASE DE GRUPOS: predicciones por partido (exacto / correcto / falla) ──
   let hechos=0, exactos=0, correctos=0, fallas=0;
   PARTIDOS_GRUPOS.forEach(p=>{
     const pr=misP[p.id];
@@ -1685,7 +1768,28 @@ function misStatsLive(){
     const ok=(res.local>res.visitante&&pl>pv)||(res.visitante>res.local&&pv>pl)||(res.local===res.visitante&&pl===pv);
     if(ok) correctos++; else fallas++;
   });
-  return {hechos, exactos, correctos, fallas};
+  // ── CLASIFICADOS DE GRUPO (orden 1°/2°) — parte de la fase de grupos ──
+  let clasPts=0, clasAciertos=0, clasEval=0;
+  Object.values(misGrupos).forEach(g=>{ clasEval++; if((g.pts||0)>0) clasAciertos++; clasPts+=(g.pts||0); });
+  // ── FASE FINAL (KO): sistema de puntaje distinto (300/200/100, ×2 Ecuador) ──
+  let koHechos=0, koExactos=0, koAciertos=0, koFallas=0, koPts=0;
+  if(typeof TODOS_KO!=='undefined'){
+    getTodosKOEnriquecidos().forEach(p=>{
+      const pr=misPKO[p.id];
+      if(!pr||pr.gl===undefined||pr.gv===undefined) return;
+      koHechos++;
+      const r=resultadosKO[p.id];
+      if(!r||!r.terminado) return;
+      const pts=_ptsKO(pr, r, p.local, p.visitante);
+      if(pts===null) return;
+      koPts+=pts;
+      if(pts>0){ koAciertos++; if(+pr.gl===+r.gl&&+pr.gv===+r.gv) koExactos++; }
+      else koFallas++;
+    });
+  }
+  return {hechos, exactos, correctos, fallas,
+    clasPts, clasAciertos, clasEval,
+    koHechos, koExactos, koAciertos, koFallas, koPts};
 }
 
 async function renderPerfil(){
@@ -1713,7 +1817,9 @@ async function verPerfil(uid){
     lista.forEach(d=>{ if(d.id===uid){puesto=pos;u=d;} pos++; });
     if(!u){mc.innerHTML='<p style="color:var(--er);font-size:.75rem;padding:1rem">Jugador no encontrado.</p>';return;}
     mc.innerHTML=carnetHTML({nombre:u.nombre||u.email, puntos:u.puntos||0, puesto, total,
-      exactos:u.stExactos||0, correctos:u.stCorrectos||0, fallas:u.stFallas||0, hechos:u.stHechos||0});
+      exactos:u.stExactos||0, correctos:u.stCorrectos||0, fallas:u.stFallas||0, hechos:u.stHechos||0,
+      clasPts:u.stClasPts||0, clasAciertos:u.stClasAciertos||0, clasEval:u.stClasEval||0,
+      koHechos:u.stKoHechos||0, koExactos:u.stKoExactos||0, koAciertos:u.stKoAciertos||0, koFallas:u.stKoFallas||0, koPts:u.stKoPts||0});
   }catch(e){mc.innerHTML='<p style="color:var(--er);font-size:.75rem;padding:1rem">Error al cargar el perfil.</p>';}
 }
 function cerrarPerfil(){document.getElementById('pf-overlay').classList.remove('show');}
@@ -2177,18 +2283,15 @@ async function saveFFBracket(){
   try{ await db.collection('usuarios').doc(CU.uid).collection('meta').doc('ffBracket').set({win:ffWin,ts:firebase.firestore.FieldValue.serverTimestamp()}); }catch(e){}
 }
 
-async function renderRanking(){
+async function refrescarRanking(){ invalidarUsuarios(); renderRanking(); renderInicioRank&&renderInicioRank(); }
+async function renderRanking(force){
   const cont=document.getElementById('ranking-content');
   cont.innerHTML='<div class="loading"><div class="spin"></div></div>';
   try{
-    const lista=await getUsuarios();
+    const lista=await getUsuarios(force);
     const top=lista.slice(0,50);
     if(top.length===0){cont.innerHTML='<div class="empty-state">Aún no hay jugadores registrados.</div>';return;}
-    let h='';
-    if(isAdmin){
-      h+=`<button class="sync-btn" type="button" style="background:var(--er);margin-bottom:1rem" onclick="if(confirm('¿Recalcular TODOS los puntos de TODOS los usuarios? Usa esto si el ranking no coincide con los puntos reales.'))forzarRecalculoTotal()">⚙️ Admin — Recalcular TODOS los puntos (fix ranking)</button>`;
-    }
-    h+=`<div class="rhead"><h3>Tabla de líderes — Contraloría Mundial 2026</h3><span>${top.length} jugadores</span></div>`;
+    let h=`<div class="rhead"><h3>Tabla de líderes — Contraloría Mundial 2026</h3><span>${top.length} jugadores · <a onclick="refrescarRanking()" style="cursor:pointer;color:var(--p);font-weight:700">🔄 Actualizar</a></span></div>`;
     let pos=1;
     top.forEach(u=>{
       const me=u.id===CU.uid;
@@ -2200,14 +2303,6 @@ async function renderRanking(){
     });
     cont.innerHTML=h;
   }catch(e){cont.innerHTML='<div class="empty-state" style="color:var(--er)">Error al cargar el ranking.</div>';}
-}
-async function forzarRecalculoTotal(){
-  if(!isAdmin) return;
-  toast('Recalculando todos los puntos... esto puede tardar.','info');
-  await recalcularTotalesCompleto();
-  invalidarUsuarios();
-  await renderRanking();
-  toast('✅ Ranking corregido con los puntos reales de cada usuario.','ok');
 }
 
 function toast(msg,type='ok'){
@@ -2232,6 +2327,6 @@ setInterval(() => {
   }
 }, 30000);
 </script>
-<div style="text-align:center;padding:.5rem;font-size:.55rem;color:#bbb;letter-spacing:1px">v3.5</div>
+<div style="text-align:center;padding:.5rem;font-size:.55rem;color:#bbb;letter-spacing:1px">v3.4</div>
 </body>
 </html>
