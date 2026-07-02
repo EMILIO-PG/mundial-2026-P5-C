@@ -686,6 +686,8 @@ html,body{overflow-x:hidden;max-width:100%}
       <div id="admin-sync" style="display:none;margin-bottom:1rem">
         <button class="sync-btn" type="button" onclick="sincronizarResultados()">🔄 Sincronizar resultados desde la API</button>
         <div class="sync-hint">Trae solo partidos finalizados. Te muestra la lista y tú confirmas antes de guardar.</div>
+        <button class="sync-btn" type="button" style="margin-top:.5rem" onclick="adminRecalcularTodo()">🧮 Recalcular totales y estadísticas</button>
+        <div class="sync-hint">Recalcula puntos y stats (grupos + fase final) de TODOS los jugadores y refresca el ranking al instante.</div>
       </div>
       <div id="hoy-content"></div>
     </div>
@@ -920,14 +922,27 @@ async function seedPartidos(){
     console.log('✓ partidos/{pid}.limite sembrados:',PARTIDOS_GRUPOS.length);
   }catch(e){console.error('seedPartidos:',e);}
 }
+const RES_CACHE_TTL = 10 * 60 * 1000; // 10 min: los resultados nuevos aparecen sin recargar la pestaña
+function _readResCache(key){
+  try{
+    const raw=sessionStorage.getItem(key);
+    if(!raw) return null;
+    const obj=JSON.parse(raw);
+    if(!obj||typeof obj!=='object'||!obj._t||!obj.data) return null; // formato viejo → ignorar
+    if(Date.now()-obj._t > RES_CACHE_TTL) return null;               // caducó
+    return obj.data;
+  }catch(e){ return null; }
+}
+function _writeResCache(key,data){
+  try{ sessionStorage.setItem(key, JSON.stringify({_t:Date.now(), data})); }catch(e){}
+}
 async function loadResultados(){
   try{
-    // Intentar leer desde sessionStorage primero (la fase de grupos terminó, no cambian más)
-    const cached=sessionStorage.getItem('wc26_resultados');
-    if(cached){ resultados=JSON.parse(cached); return; }
+    const cached=_readResCache('wc26_resultados');
+    if(cached){ resultados=cached; return; }
     const s=await db.collection('resultados').get();
     s.forEach(d=>resultados[d.id]=d.data());
-    try{ sessionStorage.setItem('wc26_resultados',JSON.stringify(resultados)); }catch(e){}
+    _writeResCache('wc26_resultados',resultados);
   }catch(e){}
 }
 function cacheMisP(){ try{ if(CU) sessionStorage.setItem('wc26_misP_'+CU.uid, JSON.stringify(misP)); }catch(e){} }
@@ -955,11 +970,11 @@ async function loadFFBracket(){
 }
 async function loadResultadosKO(){
   try{
-    const cached=sessionStorage.getItem('wc26_resultadosKO');
-    if(cached){ resultadosKO=JSON.parse(cached); return; }
+    const cached=_readResCache('wc26_resultadosKO');
+    if(cached){ resultadosKO=cached; return; }
     const s=await db.collection('resultadosKO').get();
     s.forEach(d=>resultadosKO[d.id]=d.data());
-    try{ sessionStorage.setItem('wc26_resultadosKO',JSON.stringify(resultadosKO)); }catch(e){}
+    _writeResCache('wc26_resultadosKO',resultadosKO);
   }catch(e){}
 }
 async function loadMisPronosKO(){
@@ -987,11 +1002,16 @@ function syncFFWinFromResults(){
   TODOS_KO.forEach(p=>{ const r=resultadosKO[p.id]; if(r&&r.terminado&&r.ganador) ffWin[p.id]=r.ganador; });
 }
 function updateTopPts(){
+  // FUENTE ÚNICA DE VERDAD: el puntaje oficial guardado (el mismo que usa el ranking).
+  // Así el header nunca difiere del ranking.
+  if(CUD && typeof CUD.puntos==='number'){
+    document.getElementById('top-pts').textContent=CUD.puntos+' pts';
+    return;
+  }
+  // Respaldo: cálculo local solo si aún no hay valor oficial cargado
   let t=0;
   PARTIDOS_GRUPOS.forEach(p=>{ const pts=calcPts(p.id,p.local,p.visitante); if(pts!==null)t+=pts; });
-  // Puntos de clasificados de grupos
   Object.values(misGrupos).forEach(g=>{ t+=(g.pts||0); });
-  // Puntos KO usando datos enriquecidos (incluye R16+ si ya hay ganadores)
   if(typeof TODOS_KO!=='undefined'){
     getTodosKOEnriquecidos().forEach(p=>{ if(!p.local||!p.visitante)return; const pts=calcPtsKO(p.id,p.local,p.visitante); if(pts!==null)t+=pts; });
   }
@@ -1390,6 +1410,7 @@ async function guardarRes(btn,pid){
     ts:firebase.firestore.FieldValue.serverTimestamp()};
   try{
     await db.collection('resultados').doc(pid).set(data); resultados[pid]=data;
+    _writeResCache('wc26_resultados',resultados);
     await calcPtsTodos(pid); toast('Resultado oficial guardado. ✅','ok');
     updateTopPts(); renderHoy(); renderCalendario(); renderGrupos();
   }catch(e){toast('Error: '+e.message,'err');}
@@ -1409,8 +1430,7 @@ async function guardarResKO(btn,matchId,pid){
   try{
     await db.collection('resultadosKO').doc(matchId).set(data);
     resultadosKO[matchId]=data;
-    // Invalidar sessionStorage para que otros usuarios recarguen los resultados
-    sessionStorage.removeItem('wc26_resultadosKO');
+    _writeResCache('wc26_resultadosKO',resultadosKO);
     if(ganador&&typeof TODOS_KO!=='undefined'){
       const sig=TODOS_KO.find(p=>p.ganadorDe?.local===matchId||p.ganadorDe?.visitante===matchId);
       if(sig){
@@ -1418,6 +1438,7 @@ async function guardarResKO(btn,matchId,pid){
         const upd={}; upd[slot]=ganador;
         await db.collection('resultadosKO').doc(sig.id).set(upd,{merge:true});
         resultadosKO[sig.id]={...(resultadosKO[sig.id]||{}),...upd};
+        _writeResCache('wc26_resultadosKO',resultadosKO);
       }
     }
     syncFFWinFromResults();
@@ -1499,6 +1520,7 @@ async function sincronizarResultados(){
       const d={local:x.home,visitante:x.away,finalizado:true,ts:firebase.firestore.FieldValue.serverTimestamp()};
       await db.collection('resultados').doc(x.p.id).set(d);
       resultados[x.p.id]={local:x.home,visitante:x.away,finalizado:true};
+      _writeResCache('wc26_resultados',resultados);
       await calcPtsTodos(x.p.id);
     }
     toast(`${nuevos.length} resultado(s) guardado(s) y puntos repartidos. ✅`,'ok');
@@ -1622,6 +1644,11 @@ async function _recalcularTotalesGruposLegacy(users){
   }catch(e){console.error('Error recalc totales:',e);}
 }
 
+async function adminRecalcularTodo(){
+  if(!isAdmin){ toast('Solo el admin puede hacer esto.','err'); return; }
+  toast('Recalculando totales y estadísticas de todos...','info');
+  await recalcularTotalesCompleto();
+}
 async function recalcularTotalesCompleto(){
   try{
     const users=await db.collection('usuarios').get();
@@ -2289,9 +2316,9 @@ async function renderRanking(force){
   cont.innerHTML='<div class="loading"><div class="spin"></div></div>';
   try{
     const lista=await getUsuarios(force);
-    const top=lista.slice(0,50);
+    const top=lista; // mostrar TODOS los jugadores; el total coincide con el "puesto X de N"
     if(top.length===0){cont.innerHTML='<div class="empty-state">Aún no hay jugadores registrados.</div>';return;}
-    let h=`<div class="rhead"><h3>Tabla de líderes — Contraloría Mundial 2026</h3><span>${top.length} jugadores · <a onclick="refrescarRanking()" style="cursor:pointer;color:var(--p);font-weight:700">🔄 Actualizar</a></span></div>`;
+    let h=`<div class="rhead"><h3>Tabla de líderes — Contraloría Mundial 2026</h3><span>${lista.length} jugadores · <a onclick="refrescarRanking()" style="cursor:pointer;color:var(--p);font-weight:700">🔄 Actualizar</a></span></div>`;
     let pos=1;
     top.forEach(u=>{
       const me=u.id===CU.uid;
@@ -2327,6 +2354,6 @@ setInterval(() => {
   }
 }, 30000);
 </script>
-<div style="text-align:center;padding:.5rem;font-size:.55rem;color:#bbb;letter-spacing:1px">v3.4</div>
+<div style="text-align:center;padding:.5rem;font-size:.55rem;color:#bbb;letter-spacing:1px">v3.5</div>
 </body>
 </html>
