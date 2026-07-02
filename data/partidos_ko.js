@@ -221,7 +221,7 @@ const PARTIDOS_SF = [
 // ── TERCER PUESTO ────────────────────────────────────────────────────────────
 const PARTIDO_TERCERO = {
   id:"M103", ronda:"TP",
-  fecha:"2026-07-18", hora:"15:00", sede:"TBD",
+  fecha:"2026-07-18", hora:"14:00", sede:"TBD",
   local:null, visitante:null,
   perdedorDe:{ local:"M101", visitante:"M102" },
 };
