@@ -104,7 +104,7 @@ const PARTIDOS_R32 = [
     ph:{ local:"2°D", visitante:"2°G" } },
 
   { id:"M85", ronda:"R32", llave:"R", pos:3,
-    fecha:"2026-07-02", hora:"17:00", sede:"Vancouver",
+    fecha:"2026-07-02", hora:"22:00", sede:"Vancouver",
     local:"Suiza",           visitante:"Argelia",
     ph:{ local:"1°B", visitante:"3°J" } },
 
@@ -114,7 +114,7 @@ const PARTIDOS_R32 = [
     ph:{ local:"1°K", visitante:"3°L" } },
 
   { id:"M83", ronda:"R32", llave:"R", pos:5,
-    fecha:"2026-07-02", hora:"12:00", sede:"Toronto",
+    fecha:"2026-07-02", hora:"18:00", sede:"Toronto",
     local:"Portugal",        visitante:"Croacia",
     ph:{ local:"2°K", visitante:"2°L" } },
 
