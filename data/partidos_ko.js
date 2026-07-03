@@ -171,15 +171,15 @@ const PARTIDOS_R16 = [
     local:null, visitante:null,
     ganadorDe:{ local:"M85", visitante:"M87" } },   // Sui/Arg  vs Col/Gha
 
-  { id:"M94", ronda:"R16", llave:"R", pos:3,
-    fecha:"2026-07-06", hora:"16:00", sede:"TBD",
+  { id:"M93", ronda:"R16", llave:"R", pos:3,
+    fecha:"2026-07-06", hora:"14:00", sede:"Arlington",
     local:null, visitante:null,
-    ganadorDe:{ local:"M82", visitante:"M84" } },   // Bél/Sen  vs Esp/Aut
+    ganadorDe:{ local:"M84", visitante:"M83" } },   // ✅ FIX: Esp/Aut vs Por/Cro (antes estaba cruzado con USA)
 
-  { id:"M93", ronda:"R16", llave:"R", pos:4,
-    fecha:"2026-07-06", hora:"12:00", sede:"TBD",
+  { id:"M94", ronda:"R16", llave:"R", pos:4,
+    fecha:"2026-07-06", hora:"19:00", sede:"Seattle",
     local:null, visitante:null,
-    ganadorDe:{ local:"M81", visitante:"M83" } },   // USA/Bos  vs Por/Cro
+    ganadorDe:{ local:"M82", visitante:"M81" } },   // ✅ FIX: Bél/Sen vs USA/Bos (antes estaba cruzado con España)
 ];
 
 // ── CUARTOS DE FINAL ─────────────────────────────────────────────────────────
