@@ -53,7 +53,7 @@ const PARTIDOS_R32 = [
 
   // ── LLAVE IZQUIERDA ──────────────────────────────────────────────────────
   { id:"M73", ronda:"R32", llave:"L", pos:1,
-    fecha:"2026-06-28", hora:"14:00", sede:"Los Ángeles",
+    fecha:"2026-06-28", hora:"15:00", sede:"Los Ángeles",
     local:"Sudáfrica",       visitante:"Canadá",
     ph:{ local:"2°A", visitante:"2°B" } },
 
