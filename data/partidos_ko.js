@@ -94,12 +94,12 @@ const PARTIDOS_R32 = [
 
   // ── LLAVE DERECHA ─────────────────────────────────────────────────────────
   { id:"M86", ronda:"R32", llave:"R", pos:1,
-    fecha:"2026-07-03", hora:"12:00", sede:"Miami",
+    fecha:"2026-07-03", hora:"17:00", sede:"Miami",
     local:"Argentina",       visitante:"Cabo Verde",
     ph:{ local:"1°J", visitante:"2°H" } },
 
   { id:"M88", ronda:"R32", llave:"R", pos:2,
-    fecha:"2026-07-03", hora:"18:00", sede:"Dallas",
+    fecha:"2026-07-03", hora:"13:00", sede:"Dallas",
     local:"Australia",       visitante:"Egipto",
     ph:{ local:"2°D", visitante:"2°G" } },
 
@@ -109,7 +109,7 @@ const PARTIDOS_R32 = [
     ph:{ local:"1°B", visitante:"3°J" } },
 
   { id:"M87", ronda:"R32", llave:"R", pos:4,
-    fecha:"2026-07-03", hora:"15:00", sede:"Kansas City",
+    fecha:"2026-07-03", hora:"20:30", sede:"Kansas City",
     local:"Colombia",        visitante:"Ghana",
     ph:{ local:"1°K", visitante:"3°L" } },
 
