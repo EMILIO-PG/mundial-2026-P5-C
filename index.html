@@ -686,7 +686,7 @@ html,body{overflow-x:hidden;max-width:100%}
       <div id="admin-sync" style="display:none;margin-bottom:1rem">
         <button class="sync-btn" type="button" onclick="sincronizarResultados()">🔄 Sincronizar resultados desde la API</button>
         <div class="sync-hint">Trae solo partidos finalizados. Te muestra la lista y tú confirmas antes de guardar.</div>
-        <button class="sync-btn" type="button" id="btnRecalcular" style="margin-top:.5rem" onclick="adminRecalcularTodo()">🧮 Recalcular totales y estadísticas</button>
+        <button class="sync-btn" type="button" style="margin-top:.5rem" onclick="adminRecalcularTodo()">🧮 Recalcular totales y estadísticas</button>
         <div class="sync-hint">Recalcula puntos y stats (grupos + fase final) de TODOS los jugadores y refresca el ranking al instante.</div>
       </div>
       <div id="hoy-content"></div>
@@ -830,7 +830,7 @@ async function loadServerTime(){
 }
 
 let _usuariosCache=null, _usuariosCacheAt=0;
-const USUARIOS_TTL = 2 * 60 * 1000; // 2 minutos — balance entre lecturas y frescura del ranking
+const USUARIOS_TTL = 5 * 60 * 1000; // 5 minutos — el admin ve el ranking al instante vía deltas; el resto tiene botón 🔄
 async function getUsuarios(force){
   const ahora=Date.now();
   if(!force && _usuariosCache && (ahora-_usuariosCacheAt)<USUARIOS_TTL) return _usuariosCache;
@@ -1073,12 +1073,17 @@ function _ptsKO(pr, r, local, vis){
   }
   // CASO el usuario predijo EMPATE (no exacto)
   if(gl===gv){
-    if(rl===rv) return pr.quienPasa===r.quienPasa ? 200*mult : 0;        // empate real: acertó quién pasa → 200
+    if(rl===rv) return pr.quienPasa===r.quienPasa ? 200*mult : 100*mult; // empate real: pasa bien → 200; pasa mal → 100 (acertó el empate)
     return pr.quienPasa===avanzaReal ? 100*mult : 0;                     // empate predicho pero hubo ganador: acertó quién avanza → 100
   }
   // CASO el usuario predijo GANADOR (no exacto)
   const ganadorPred = gl>gv?'local':'visitante';
-  return ganadorPred===avanzaReal ? 200*mult : 0;                        // acertó quién avanza → 200, si no → 0
+  if(rl===rv){
+    // Real fue EMPATE (se definió por penales): NO acertó el resultado de 90'.
+    // Si su equipo fue el que pasó → 100 ("empate+pasa"); si no → 0.
+    return ganadorPred===r.quienPasa ? 100*mult : 0;
+  }
+  return ganadorPred===avanzaReal ? 200*mult : 0;                        // hubo ganador real y lo acertó → 200
 }
 function calcPtsKO(pid,local,vis){
   return _ptsKO(misPKO[pid], resultadosKO[pid], local, vis);
@@ -1535,6 +1540,8 @@ async function calcPtsTodos(pid){
     if(!part||!res) return;
     const users=await db.collection('usuarios').get();
     const batch=db.batch();
+    const inc=firebase.firestore.FieldValue.increment;
+    const deltas={};
     for(const ud of users.docs){
       const uid=ud.id;
       const pref=db.collection('pronosticos').doc(uid).collection('partidos').doc(pid);
@@ -1551,11 +1558,51 @@ async function calcPtsTodos(pid){
         if(esEcu){const ecuG=(part.local==='Ecuador'&&lG)||(part.visitante==='Ecuador'&&vG);if(ecuG&&ex)pts=PUNTOS.ECUADOR_MARCADOR_EXACTO;else pts=PUNTOS.ECUADOR_RESULTADO_CORRECTO;}
         else if(ex)pts=PUNTOS.MARCADOR_EXACTO;else pts=PUNTOS.RESULTADO_CORRECTO;
       }
-      batch.set(pref,{pts:pts,acierto:pts>0,tipo:(pts>0&&ex)?'exacto':(pts>0?'resultado':'fallo')},{merge:true});
+      const tipoNew=(pts>0&&ex)?'exacto':(pts>0?'resultado':'fallo');
+      // Estado previo de ESTE partido (si ya se había puntuado) → deltas, sin re-escanear todo
+      const scoredOld = pr.pts!==undefined;
+      const oldPts = scoredOld?(pr.pts||0):0;
+      const oldTipo = scoredOld?(pr.tipo||'fallo'):null;
+      batch.set(pref,{pts:pts,acierto:pts>0,tipo:tipoNew},{merge:true});
+      const d={
+        puntos: pts-oldPts,
+        aciertos:(pts>0?1:0)-(oldPts>0?1:0),
+        stExactos:(tipoNew==='exacto'?1:0)-(oldTipo==='exacto'?1:0),
+        stCorrectos:(tipoNew==='resultado'?1:0)-(oldTipo==='resultado'?1:0),
+        stFallas:(tipoNew==='fallo'?1:0)-(oldTipo==='fallo'?1:0)
+      };
+      if(d.puntos||d.aciertos||d.stExactos||d.stCorrectos||d.stFallas){
+        batch.update(db.collection('usuarios').doc(uid),{
+          puntos:inc(d.puntos),aciertos:inc(d.aciertos),
+          stExactos:inc(d.stExactos),stCorrectos:inc(d.stCorrectos),stFallas:inc(d.stFallas)
+        });
+        deltas[uid]=d;
+      }
     }
     await batch.commit();
-    await recalcularTotales(users);
-  }catch(e){console.error('Error calc pts:',e);}
+    aplicarDeltasCache(deltas); // ranking/header al instante, 0 lecturas extra
+  }catch(e){console.error('Error calc pts:',e); toast('❌ Error repartiendo puntos: '+(e.code||e.message||e),'err');}
+}
+
+// Aplica deltas a la caché local de usuarios y refresca UI sin tocar Firestore
+function aplicarDeltasCache(deltas){
+  const keys=Object.keys(deltas||{});
+  if(!keys.length) return;
+  if(_usuariosCache){
+    _usuariosCache.forEach(u=>{
+      const d=deltas[u.id]; if(!d) return;
+      ['puntos','aciertos','stExactos','stCorrectos','stFallas','stKoPts','stKoAciertos','stKoFallas','stKoExactos','stKoHechos'].forEach(k=>{ if(d[k]) u[k]=(u[k]||0)+d[k]; });
+    });
+    _usuariosCache.sort((a,b)=>(b.puntos||0)-(a.puntos||0));
+    _usuariosCacheAt=Date.now();
+  }
+  if(CU&&CUD&&deltas[CU.uid]){
+    const d=deltas[CU.uid];
+    CUD.puntos=(CUD.puntos||0)+(d.puntos||0);
+    if(d.aciertos) CUD.aciertos=(CUD.aciertos||0)+d.aciertos;
+  }
+  updateTopPts();
+  try{ renderRanking(); }catch(e){}
 }
 
 async function calcPtsGruposTodos(){
@@ -1597,6 +1644,9 @@ async function calcPtsTodosKO(matchId, partido){
   try{
     const users=await db.collection('usuarios').get();
     const batch=db.batch();
+    const inc=firebase.firestore.FieldValue.increment;
+    const deltas={};
+    const r=resultadosKO[matchId];
     for(const ud of users.docs){
       const uid=ud.id;
       const ref=db.collection('pronosticosKO').doc(uid).collection('partidos').doc(matchId);
@@ -1604,13 +1654,32 @@ async function calcPtsTodosKO(matchId, partido){
       if(!snap.exists) continue;
       const pr=snap.data();
       if(pr.gl===undefined||pr.gv===undefined) continue;
-      // Calcular con el pronóstico REAL de este usuario (pr), no con la variable global
-      const pts=_ptsKO(pr, resultadosKO[matchId], partido.local, partido.visitante);
-      batch.set(ref,{pts:pts||0,calculado:true},{merge:true});
+      const pts=_ptsKO(pr, r, partido.local, partido.visitante)||0;
+      const exNew=!!(r&&r.terminado&&(+pr.gl===+r.gl&&+pr.gv===+r.gv));
+      // Estado previo puntuado de este KO → deltas
+      const oldScored=!!pr.calculado;
+      const oldPts=oldScored?(pr.pts||0):0;
+      const oldEx=oldScored?!!pr.ex:false;
+      batch.set(ref,{pts:pts,calculado:true,ex:exNew},{merge:true});
+      const d={
+        puntos:pts-oldPts,
+        stKoPts:pts-oldPts,
+        stKoAciertos:(pts>0?1:0)-(oldPts>0?1:0),
+        stKoFallas:(pts===0?1:0)-((oldScored&&oldPts===0)?1:0),
+        stKoExactos:(exNew?1:0)-(oldEx?1:0),
+        stKoHechos:oldScored?0:1
+      };
+      if(d.puntos||d.stKoAciertos||d.stKoFallas||d.stKoExactos||d.stKoHechos){
+        batch.update(db.collection('usuarios').doc(uid),{
+          puntos:inc(d.puntos),stKoPts:inc(d.stKoPts),stKoAciertos:inc(d.stKoAciertos),
+          stKoFallas:inc(d.stKoFallas),stKoExactos:inc(d.stKoExactos),stKoHechos:inc(d.stKoHechos)
+        });
+        deltas[uid]=d;
+      }
     }
     await batch.commit();
-    await recalcularTotalesCompleto();
-  }catch(e){ console.error('Error calcPtsTodosKO:',e); }
+    aplicarDeltasCache(deltas);
+  }catch(e){ console.error('Error calcPtsTodosKO:',e); toast('❌ Error repartiendo puntos KO: '+(e.code||e.message||e),'err'); }
 }
 
 async function recalcularTotales(users){
@@ -1649,52 +1718,21 @@ async function adminRecalcularTodo(){
   toast('Recalculando totales y estadísticas de todos...','info');
   await recalcularTotalesCompleto();
 }
-let _recalculando=false;
 async function recalcularTotalesCompleto(){
-  if(_recalculando){ toast('Ya hay un recálculo en curso, esperá a que termine.','info'); return {ok:0,fail:0,errores:[],skipped:true}; }
-  const todosKoOk = typeof TODOS_KO!=='undefined' && Array.isArray(TODOS_KO) && TODOS_KO.length>0;
-  if(!todosKoOk) console.warn('recalcularTotalesCompleto: TODOS_KO no está definido o vacío (¿falló data/partidos_ko.js?). Se recalculan grupos; NO se tocan los campos de fase final para no pisarlos con ceros.');
-  _recalculando=true;
-  const btn=document.getElementById('btnRecalcular');
-  if(btn){ btn.disabled=true; btn.textContent='🧮 Recalculando…'; }
-  let total=0;
   try{
     const users=await db.collection('usuarios').get();
-    total=users.docs.length;
-    toast(`Recalculando ${total} usuarios…`,'info');
     const batch=db.batch();
-    const errores=[];
-    let completados=0;
-    const marcarProgreso=()=>{ completados++; if(completados%10===0||completados===total) toast(`Recalculando… ${completados}/${total}`,'info'); };
-
-    const tareas=users.docs.map(async(ud)=>{
+    const filas=[]; // para actualizar la caché en memoria y re-pintar el ranking al instante
+    const errores=[]; let i=0;
+    for(const ud of users.docs){
+      i++;
+      if(i%15===0) toast(`Recalculando... ${i}/${users.size}`,'info');
       const uid=ud.id;
       const udata=ud.data()||{};
-      const nombre=udata.nombre||udata.email||uid;
-
-      // Lecturas en paralelo (antes eran 2-3 awaits secuenciales por usuario).
-      // Se guarda la colección de cada lectura para poder señalar EXACTAMENTE
-      // cuál falló (ej. permission-denied en pronosticosKO) en vez de tragarse el error.
-      const lecturas=[
-        {key:'pronosticos', p:db.collection('pronosticos').doc(uid).collection('partidos').get()},
-        {key:'pronosticosGrupos', p:db.collection('pronosticosGrupos').doc(uid).collection('grupos').get()}
-      ];
-      if(todosKoOk) lecturas.push({key:'pronosticosKO', p:db.collection('pronosticosKO').doc(uid).collection('partidos').get()});
-
-      const settled=await Promise.allSettled(lecturas.map(l=>l.p));
-      const idxFallo=settled.findIndex(s=>s.status==='rejected');
-      if(idxFallo!==-1){
-        // Si CUALQUIER lectura de este usuario falla, no escribimos NADA para él:
-        // mejor dejar sus valores actuales (probablemente correctos) que pisarlos
-        // con ceros por una lectura que no se pudo hacer.
-        const err=settled[idxFallo].reason;
-        errores.push({uid, nombre, coleccion:lecturas[idxFallo].key, code:err?.code||'?', message:err?.message||String(err)});
-        marcarProgreso();
-        return {ok:false, uid, nombre};
-      }
-
-      const partsSnap=settled[0].value, grSnap=settled[1].value, koSnap=todosKoOk?settled[2].value:null;
-
+      let partsSnap;
+      try{
+        partsSnap=await db.collection('pronosticos').doc(uid).collection('partidos').get();
+      }catch(e){ errores.push((udata.nombre||uid)+': '+(e.code||e.message)); continue; }
       let puntos=0, aciertos=0, ex=0, co=0, fa=0, he=0;
       partsSnap.forEach(d=>{
         const x=d.data();
@@ -1709,84 +1747,56 @@ async function recalcularTotalesCompleto(){
         const ok=(res.local>res.visitante&&pl>pv)||(res.visitante>res.local&&pv>pl)||(res.local===res.visitante&&pl===pv);
         if(ok) co++; else fa++;
       });
-
       // Clasificados de grupo
       let clasPts=0, clasAciertos=0, clasEval=0;
-      grSnap.forEach(d=>{ const p=d.data().pts||0; clasEval++; if(p>0) clasAciertos++; clasPts+=p; puntos+=p; });
-
-      const tot={puntos,aciertos,stExactos:ex,stCorrectos:co,stFallas:fa,stHechos:he,
-        stClasPts:clasPts,stClasAciertos:clasAciertos,stClasEval:clasEval};
-
-      // Fase final (KO) — solo si TODOS_KO cargó bien. Si no, se omiten estos campos
-      // del update en vez de escribirlos en 0 (ver todosKoOk arriba).
-      if(todosKoOk){
-        let koHechos=0, koExactos=0, koAciertos=0, koFallas=0, koPts=0;
+      try{
+        const grSnap=await db.collection('pronosticosGrupos').doc(uid).collection('grupos').get();
+        grSnap.forEach(d=>{ const p=d.data().pts||0; clasEval++; if(p>0) clasAciertos++; clasPts+=p; puntos+=p; });
+      }catch(e){ errores.push('grupos '+(udata.nombre||uid)+': '+(e.code||e.message)); }
+      // Fase final (KO)
+      let koHechos=0, koExactos=0, koAciertos=0, koFallas=0, koPts=0;
+      try{
+        const koSnap=await db.collection('pronosticosKO').doc(uid).collection('partidos').get();
         koSnap.forEach(d=>{
           const x=d.data();
           if(x.gl===undefined) return;
           koHechos++;
-          const base=TODOS_KO.find(p=>p.id===d.id);
+          const base=(typeof TODOS_KO!=='undefined')?TODOS_KO.find(p=>p.id===d.id):null;
           if(!base) return;
+          // Enriquecer equipos (R16+ tienen local/visitante null hasta propagar el ganador)
           const rr=resultadosKO[d.id]||{};
           const loc=base.local||rr.local, vis=base.visitante||rr.visitante;
+          // Calcular con el pronóstico de ESTE usuario (x), no con la global misPKO
           const pts=_ptsKO(x, rr, loc, vis);
           if(pts===null) return;
           koPts+=pts;
           if(pts>0){ puntos+=pts; koAciertos++; if(+x.gl===+rr.gl&&+x.gv===+rr.gv) koExactos++; }
           else koFallas++;
         });
-        tot.puntos=puntos; // puntos puede haber crecido con koPts
-        tot.stKoHechos=koHechos; tot.stKoExactos=koExactos; tot.stKoAciertos=koAciertos; tot.stKoFallas=koFallas; tot.stKoPts=koPts;
-      }
-
-      marcarProgreso();
-      return {ok:true, uid, nombre, email:udata.email, admin:udata.admin, tot};
-    });
-
-    const procesados=await Promise.all(tareas);
-    const filas=[];
-    for(const r of procesados){
-      if(!r.ok) continue;
-      batch.update(db.collection('usuarios').doc(r.uid), r.tot);
-      filas.push({id:r.uid, nombre:r.nombre, email:r.email, admin:r.admin, ...r.tot});
+      }catch(e){ errores.push('KO '+(udata.nombre||uid)+': '+(e.code||e.message)); }
+      const tot={puntos,aciertos,stExactos:ex,stCorrectos:co,stFallas:fa,stHechos:he,
+        stClasPts:clasPts,stClasAciertos:clasAciertos,stClasEval:clasEval,
+        stKoHechos:koHechos,stKoExactos:koExactos,stKoAciertos:koAciertos,stKoFallas:koFallas,stKoPts:koPts};
+      batch.update(db.collection('usuarios').doc(uid),tot);
+      filas.push({id:uid, nombre:udata.nombre, email:udata.email, admin:udata.admin, ...tot});
     }
-    if(filas.length>0) await batch.commit();
-
-    // Actualizar caché en memoria y re-pintar el ranking al instante.
-    // Solo confiamos en `filas` como universo completo si TODOS los usuarios
-    // se recalcularon sin error Y con fase final incluida; si no, invalidamos
-    // para forzar una lectura fresca y completa (en vez de mostrar un ranking
-    // parcial o con campos de fase final desactualizados).
-    if(errores.length===0 && todosKoOk){
-      _usuariosCache=filas.sort((a,b)=>(b.puntos||0)-(a.puntos||0));
-      _usuariosCacheAt=Date.now();
-    }else{
-      invalidarUsuarios();
-    }
-    if(CUD){ const yo=filas.find(u=>u.id===CU.uid); if(yo){ CUD.puntos=yo.puntos; CUD.aciertos=yo.aciertos; } }
+    await batch.commit();
+    // Actualizar caché en memoria con los totales recién calculados (0 lecturas extra) y re-pintar YA
+    _usuariosCache=filas.sort((a,b)=>(b.puntos||0)-(a.puntos||0));
+    _usuariosCacheAt=Date.now();
+    if(CUD){ const yo=_usuariosCache.find(u=>u.id===CU.uid); if(yo){ CUD.puntos=yo.puntos; CUD.aciertos=yo.aciertos; } }
     await loadMisGrupos(true); // refrescar puntos de grupos del usuario actual
     updateTopPts(); renderInicio();
     if(typeof renderRanking==='function') renderRanking();
-
     if(errores.length){
-      console.group(`⚠️ recalcularTotalesCompleto: ${errores.length}/${total} usuario(s) con error de lectura`);
-      console.table(errores);
-      console.groupEnd();
+      toast(`Recalculado con ${errores.length} error(es). Primero: ${errores[0]}`,'err');
+      console.error('Errores recalc:',errores);
+    } else {
+      toast('Totales y ranking actualizados ✅','ok');
     }
-    const permisos=errores.filter(e=>e.code==='permission-denied').length;
-    if(!todosKoOk){
-      toast(`⚠️ Grupos OK (${filas.length}/${total}). Fase final NO recalculada: TODOS_KO no cargó (ver consola).`,'err');
-    }else if(errores.length===0){
-      toast(`Totales y ranking actualizados ✅ (${filas.length}/${total})`,'ok');
-    }else if(permisos>0){
-      toast(`⚠️ ${filas.length}/${total} OK. ${permisos} sin PERMISO de lectura — revisá las reglas de Firestore (ver consola).`,'err');
-    }else{
-      toast(`⚠️ ${filas.length}/${total} OK. ${errores.length} con error — ver consola.`,'err');
-    }
-    return {ok:filas.length, fail:errores.length, errores, todosKoOk};
-  }catch(e){ console.error('Error crítico en recalcularTotalesCompleto:',e); toast('❌ Error crítico al recalcular: '+(e.message||e),'err'); return {ok:0, fail:total, errores:[{code:e.code||'?', message:e.message||String(e)}]}; }finally{
-    _recalculando=false;
-    if(btn){ btn.disabled=false; btn.textContent='🧮 Recalcular totales y estadísticas'; }
+  }catch(e){
+    console.error('Error recalcularTotalesCompleto:',e);
+    toast('❌ Error al recalcular: '+(e.code||e.message||e),'err');
   }
 }
 
@@ -1822,6 +1832,7 @@ function carnetHTML(o){
   const clasEval=o.clasEval||0;
   // Fase final (KO) — puntaje distinto, se muestra aparte
   const koHechos=o.koHechos||0;
+  const koAny=koHechos||o.koPts||o.koAciertos||o.koFallas||o.koExactos;
   const koEval=(o.koAciertos||0)+(o.koFallas||0);
   const koPct=koEval?Math.round(((o.koAciertos||0)/koEval)*100):0;
   return `<div class="carnet">
@@ -1843,7 +1854,7 @@ function carnetHTML(o){
     ${clasEval?`<div class="cn-clas">🥇 Clasificados: <strong>${o.clasAciertos||0}/${clasEval}</strong> grupos acertados · <strong>${o.clasPts||0}</strong> pts</div>`:''}
 
     <div class="cn-sec-lbl ko">🏆 Fase final · KO (puntaje 300/200/100 · ×2 Ecuador)</div>
-    ${koHechos?`<div class="cn-grid">
+    ${koAny?`<div class="cn-grid">
       <div class="cn-st"><span class="cn-n ok">${o.koExactos||0}</span><span class="cn-l">Marcador exacto 🎯</span></div>
       <div class="cn-st"><span class="cn-n mid">${o.koAciertos||0}</span><span class="cn-l">Aciertos ✓</span></div>
       <div class="cn-st"><span class="cn-n bad">${o.koFallas||0}</span><span class="cn-l">Fallas ✗</span></div>
@@ -2427,6 +2438,6 @@ setInterval(() => {
   }
 }, 30000);
 </script>
-<div style="text-align:center;padding:.5rem;font-size:.55rem;color:#bbb;letter-spacing:1px">v3.5</div>
+<div style="text-align:center;padding:.5rem;font-size:.55rem;color:#bbb;letter-spacing:1px">v3.7</div>
 </body>
 </html>
