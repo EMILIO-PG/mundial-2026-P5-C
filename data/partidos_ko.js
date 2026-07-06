@@ -156,7 +156,7 @@ const PARTIDOS_R16 = [
     ganadorDe:{ local:"M76", visitante:"M78" } },   // Bra/Jap  vs CdM/Nor
 
   { id:"M92", ronda:"R16", llave:"L", pos:4,
-    fecha:"2026-07-05", hora:"19:00", sede:"Ciudad de México",
+    fecha:"2026-07-05", hora:"20:00", sede:"Ciudad de México",
     local:null, visitante:null,
     ganadorDe:{ local:"M79", visitante:"M80" } },   // Méx/Ecu  vs Ing/RDC
 
