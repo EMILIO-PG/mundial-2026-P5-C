@@ -167,7 +167,7 @@ const PARTIDOS_R16 = [
     ganadorDe:{ local:"M86", visitante:"M88" } },   // Arg/CaV  vs Aus/Egi
 
   { id:"M95", ronda:"R16", llave:"R", pos:2,
-    fecha:"2026-07-07", hora:"12:00", sede:"TBD",
+    fecha:"2026-07-07", hora:"11:00", sede:"TBD",
     local:null, visitante:null,
     ganadorDe:{ local:"M85", visitante:"M87" } },   // Sui/Arg  vs Col/Gha
 
