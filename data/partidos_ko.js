@@ -183,37 +183,43 @@ const PARTIDOS_R16 = [
 ];
 
 // ── CUARTOS DE FINAL ─────────────────────────────────────────────────────────
+// ✅ Fechas/horas/sedes reales (HORA ECUADOR, UTC-5):
+//    M97 Marruecos/Francia   → Jue 09/07 15:00  Foxborough
+//    M99 España/Bélgica      → Vie 10/07 14:00  Los Ángeles (SoFi)
+//    M98 Noruega/Inglaterra  → Sáb 11/07 16:00  Miami (Hard Rock)
+//    M100 Argentina/Suiza    → Sáb 11/07 20:00  Kansas City (Arrowhead)
 const PARTIDOS_QF = [
   { id:"M97", ronda:"QF", llave:"L", pos:1,
-    fecha:"2026-07-10", hora:"14:00", sede:"TBD",
+    fecha:"2026-07-09", hora:"15:00", sede:"Foxborough",
     local:null, visitante:null,
     ganadorDe:{ local:"M89", visitante:"M90" } },
 
   { id:"M98", ronda:"QF", llave:"L", pos:2,
-    fecha:"2026-07-10", hora:"18:00", sede:"TBD",
+    fecha:"2026-07-11", hora:"16:00", sede:"Miami",
     local:null, visitante:null,
     ganadorDe:{ local:"M91", visitante:"M92" } },
 
   { id:"M100", ronda:"QF", llave:"R", pos:1,
-    fecha:"2026-07-11", hora:"18:00", sede:"TBD",
+    fecha:"2026-07-11", hora:"20:00", sede:"Kansas City",
     local:null, visitante:null,
     ganadorDe:{ local:"M95", visitante:"M96" } },
 
   { id:"M99", ronda:"QF", llave:"R", pos:2,
-    fecha:"2026-07-11", hora:"14:00", sede:"TBD",
+    fecha:"2026-07-10", hora:"14:00", sede:"Los Ángeles",
     local:null, visitante:null,
     ganadorDe:{ local:"M93", visitante:"M94" } },
 ];
 
 // ── SEMIFINALES ──────────────────────────────────────────────────────────────
+// ⏰ Fechas confirmadas; la hora (ECU) aún es tentativa hasta que FIFA la publique.
 const PARTIDOS_SF = [
   { id:"M101", ronda:"SF", llave:"L",
-    fecha:"2026-07-14", hora:"15:00", sede:"TBD",
+    fecha:"2026-07-14", hora:"15:00", sede:"Arlington",
     local:null, visitante:null,
     ganadorDe:{ local:"M97", visitante:"M98" } },
 
   { id:"M102", ronda:"SF", llave:"R",
-    fecha:"2026-07-15", hora:"15:00", sede:"TBD",
+    fecha:"2026-07-15", hora:"15:00", sede:"Atlanta",
     local:null, visitante:null,
     ganadorDe:{ local:"M99", visitante:"M100" } },
 ];
@@ -221,7 +227,7 @@ const PARTIDOS_SF = [
 // ── TERCER PUESTO ────────────────────────────────────────────────────────────
 const PARTIDO_TERCERO = {
   id:"M103", ronda:"TP",
-  fecha:"2026-07-18", hora:"14:00", sede:"TBD",
+  fecha:"2026-07-18", hora:"14:00", sede:"Miami",
   local:null, visitante:null,
   perdedorDe:{ local:"M101", visitante:"M102" },
 };
