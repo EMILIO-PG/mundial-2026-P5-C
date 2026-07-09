@@ -1429,20 +1429,38 @@ async function guardarResKO(btn,matchId,pid){
   if(isNaN(gl)||isNaN(gv)){ toast('Marcador KO inválido.','err'); return; }
   const quienPasa = gl===gv ? (ADM_QP_STATE[pid]||null) : (gl>gv?'local':'visitante');
   if(gl===gv&&!quienPasa){ toast('Empate: selecciona quién pasa.','err'); return; }
-  const partido = (typeof TODOS_KO!=='undefined') ? TODOS_KO.find(p=>p.id===matchId) : null;
-  const ganador = partido ? (quienPasa==='local'?partido.local:partido.visitante) : null;
+  const partidoRaw = (typeof TODOS_KO!=='undefined') ? TODOS_KO.find(p=>p.id===matchId) : null;
+  // Equipos ENRIQUECIDOS: en R16+ el partido crudo trae local/visitante en null;
+  // los equipos reales viven en resultadosKO[matchId] (propagados desde la ronda anterior).
+  const rExist = resultadosKO[matchId] || {};
+  const equipoLocal = (partidoRaw && partidoRaw.local) || rExist.local || null;
+  const equipoVisitante = (partidoRaw && partidoRaw.visitante) || rExist.visitante || null;
+  const partido = partidoRaw ? {...partidoRaw, local:equipoLocal, visitante:equipoVisitante} : null;
+  const ganador = quienPasa==='local' ? equipoLocal : equipoVisitante;
+  const perdedor = quienPasa==='local' ? equipoVisitante : equipoLocal;
   const data={gl,gv,quienPasa,ganador,terminado,ts:firebase.firestore.FieldValue.serverTimestamp()};
   try{
-    await db.collection('resultadosKO').doc(matchId).set(data);
-    resultadosKO[matchId]=data;
+    // merge:true → NO borra los equipos ya propagados (local/visitante) de este partido
+    await db.collection('resultadosKO').doc(matchId).set(data,{merge:true});
+    resultadosKO[matchId]={...rExist,...data};
     _writeResCache('wc26_resultadosKO',resultadosKO);
     if(ganador&&typeof TODOS_KO!=='undefined'){
+      // Propagar GANADOR al siguiente partido (ganadorDe)
       const sig=TODOS_KO.find(p=>p.ganadorDe?.local===matchId||p.ganadorDe?.visitante===matchId);
       if(sig){
         const slot = sig.ganadorDe?.local===matchId ? 'local' : 'visitante';
         const upd={}; upd[slot]=ganador;
         await db.collection('resultadosKO').doc(sig.id).set(upd,{merge:true});
         resultadosKO[sig.id]={...(resultadosKO[sig.id]||{}),...upd};
+        _writeResCache('wc26_resultadosKO',resultadosKO);
+      }
+      // Propagar PERDEDOR al partido por el 3er puesto (perdedorDe)
+      const sigL=TODOS_KO.find(p=>p.perdedorDe?.local===matchId||p.perdedorDe?.visitante===matchId);
+      if(sigL&&perdedor){
+        const slotL = sigL.perdedorDe?.local===matchId ? 'local' : 'visitante';
+        const updL={}; updL[slotL]=perdedor;
+        await db.collection('resultadosKO').doc(sigL.id).set(updL,{merge:true});
+        resultadosKO[sigL.id]={...(resultadosKO[sigL.id]||{}),...updL};
         _writeResCache('wc26_resultadosKO',resultadosKO);
       }
     }
