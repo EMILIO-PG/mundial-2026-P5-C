@@ -913,13 +913,24 @@ async function seedPartidos(){
   try{
     const batch=db.batch();
     PARTIDOS_GRUPOS.forEach(p=>{
-      const dt=new Date(p.fecha+'T'+p.hora+':00-05:00');
+      const dt=new Date(p.fecha+'T'+(p.hora||'23:59')+':00-05:00');
       batch.set(db.collection('partidos').doc(p.id),
         {limite:firebase.firestore.Timestamp.fromDate(dt),local:p.local,visitante:p.visitante,fecha:p.fecha,hora:p.hora},
         {merge:true});
     });
+    // También sembramos los partidos KO → así sus pronósticos también se cierran por hora (regla request.time < limiteDe).
+    let nKO=0;
+    if(typeof TODOS_KO!=='undefined'){
+      TODOS_KO.forEach(p=>{
+        const dt=new Date(p.fecha+'T'+(p.hora||'23:59')+':00-05:00');
+        batch.set(db.collection('partidos').doc(p.id),
+          {limite:firebase.firestore.Timestamp.fromDate(dt),fecha:p.fecha,hora:p.hora,ronda:p.ronda},
+          {merge:true});
+      });
+      nKO=TODOS_KO.length;
+    }
     await batch.commit();
-    console.log('✓ partidos/{pid}.limite sembrados:',PARTIDOS_GRUPOS.length);
+    console.log('✓ partidos/{pid}.limite sembrados:',PARTIDOS_GRUPOS.length+nKO,'(grupos + KO)');
   }catch(e){console.error('seedPartidos:',e);}
 }
 const RES_CACHE_TTL = 10 * 60 * 1000; // 10 min: los resultados nuevos aparecen sin recargar la pestaña
