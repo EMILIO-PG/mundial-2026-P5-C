@@ -211,17 +211,21 @@ const PARTIDOS_QF = [
 ];
 
 // ── SEMIFINALES ──────────────────────────────────────────────────────────────
-// ⏰ Fechas confirmadas; la hora (ECU) aún es tentativa hasta que FIFA la publique.
+// ✅ FIX cruces: en numeración FIFA oficial M98=Esp/Bél y M99=Nor/Ing (nuestros
+//    IDs quedaron invertidos). NO renombramos los QF porque ya tienen resultados
+//    y predicciones en Firestore; solo corregimos las fuentes de cada semi.
+//    M101 = Francia vs España     (Mar 14/07 14:00 ECU, Arlington)
+//    M102 = Inglaterra vs Argentina (Mié 15/07 14:00 ECU, Atlanta)
 const PARTIDOS_SF = [
   { id:"M101", ronda:"SF", llave:"L",
-    fecha:"2026-07-14", hora:"15:00", sede:"Arlington",
+    fecha:"2026-07-14", hora:"14:00", sede:"Arlington",
     local:null, visitante:null,
-    ganadorDe:{ local:"M97", visitante:"M98" } },
+    ganadorDe:{ local:"M97", visitante:"M99" } },   // Fra/Mar vs Esp/Bél
 
   { id:"M102", ronda:"SF", llave:"R",
-    fecha:"2026-07-15", hora:"15:00", sede:"Atlanta",
+    fecha:"2026-07-15", hora:"14:00", sede:"Atlanta",
     local:null, visitante:null,
-    ganadorDe:{ local:"M99", visitante:"M100" } },
+    ganadorDe:{ local:"M98", visitante:"M100" } },  // Nor/Ing vs Arg/Sui
 ];
 
 // ── TERCER PUESTO ────────────────────────────────────────────────────────────
@@ -278,4 +282,5 @@ function getLabelBracket(partidoId, slot) {
 // Devuelve true si Ecuador participa en el partido KO
 function esPartidoEcuadorKO(partido) {
   return partido.local === 'Ecuador' || partido.visitante === 'Ecuador';
-}
+  }
+      
