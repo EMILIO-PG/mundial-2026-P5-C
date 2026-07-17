@@ -283,4 +283,38 @@ function getLabelBracket(partidoId, slot) {
 function esPartidoEcuadorKO(partido) {
   return partido.local === 'Ecuador' || partido.visitante === 'Ecuador';
   }
-      
+
+// ============================================================================
+//  PROPS ESPECIALES — solo Tercer Puesto (M103) y Final (M104)
+//  "Emoción hasta el final": preguntas extra aparte del marcador 90'.
+//  Final = puntaje completo · Tercer puesto = mitad
+// ============================================================================
+const PROPS_FINAL = [
+  { id:'primerGol',       pregunta:'¿Qué equipo anota el primer gol?',
+    opciones:[['local','Equipo Local'],['visitante','Equipo Visitante'],['ninguno','Ninguno']], puntos:100 },
+  { id:'posesion',        pregunta:'¿Qué equipo tendrá la mayor posesión de balón?',
+    opciones:[['local','Equipo Local'],['visitante','Equipo Visitante']], puntos:100 },
+  { id:'mas3Tarjetas',    pregunta:'¿Habrá más de 3 tarjetas en el partido?',
+    opciones:[['si','Sí'],['no','No']], puntos:100 },
+  { id:'mas9Corners',     pregunta:'¿Habrá más de 9 tiros de esquina en el partido?',
+    opciones:[['si','Sí'],['no','No']], puntos:100 },
+  { id:'primerTiroArco',  pregunta:'¿Qué equipo realiza el primer tiro al arco?',
+    opciones:[['local','Equipo Local'],['visitante','Equipo Visitante']], puntos:50 },
+  { id:'primeraAmarilla', pregunta:'¿Qué equipo recibirá la primera tarjeta amarilla?',
+    opciones:[['local','Equipo Local'],['visitante','Equipo Visitante'],['ninguno','Ninguno']], puntos:50 },
+];
+// Tercer puesto = mitad de puntos de la final (100→50, 50→25)
+const PROPS_TERCERO = PROPS_FINAL.map(p => ({ ...p, puntos: p.puntos / 2 }));
+
+// matchId → lista de props que le corresponden
+const PROPS_KO_CONFIG = { M104: PROPS_FINAL, M103: PROPS_TERCERO };
+function getPropsKO(matchId) { return PROPS_KO_CONFIG[matchId] || null; }
+
+// ── PUNTAJE DEL MARCADOR (90') POR PARTIDO ──────────────────────────────────
+// Todo el bracket usa 300/200/100 salvo la Final (M104), que sube a 500/300/200.
+// El Tercer Puesto (M103) se queda en el estándar 300/200/100.
+const PUNTOS_KO_TIERS = {
+  default: { exacto:300, resultado:200, empateAvanza:100 },
+  M104:    { exacto:500, resultado:300, empateAvanza:200 },
+};
+function getPuntosKOTier(matchId) { return PUNTOS_KO_TIERS[matchId] || PUNTOS_KO_TIERS.default; }
