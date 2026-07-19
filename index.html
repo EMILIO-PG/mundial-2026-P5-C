@@ -119,6 +119,7 @@ html,body{overflow-x:hidden;max-width:100%}
 .cn-foot strong{color:var(--k);font-weight:900}
 .cn-sec-lbl{padding:.5rem .75rem;background:var(--pl);border-top:1px solid var(--ln);font-size:.6rem;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--p2)}
 .cn-sec-lbl.ko{background:#fff7d6;color:#8a6d00}
+.cn-sec-lbl.props{background:#e8f4ff;color:#0b5394}
 .cn-clas{padding:.55rem .75rem;border-top:1px solid var(--ln);font-size:.66rem;color:var(--g4);text-align:center}
 .cn-clas strong{color:var(--k);font-weight:900}
 /* Modal perfil ajeno */
@@ -1756,7 +1757,7 @@ function aplicarDeltasCache(deltas){
   if(_usuariosCache){
     _usuariosCache.forEach(u=>{
       const d=deltas[u.id]; if(!d) return;
-      ['puntos','aciertos','stExactos','stCorrectos','stFallas','stKoPts','stKoAciertos','stKoFallas','stKoExactos','stKoHechos','stPropsPts'].forEach(k=>{ if(d[k]) u[k]=(u[k]||0)+d[k]; });
+      ['puntos','aciertos','stExactos','stCorrectos','stFallas','stKoPts','stKoAciertos','stKoFallas','stKoExactos','stKoHechos','stPropsPts','stPropsAciertos','stPropsFallas'].forEach(k=>{ if(d[k]) u[k]=(u[k]||0)+d[k]; });
     });
     _usuariosCache.sort((a,b)=>(b.puntos||0)-(a.puntos||0));
     _usuariosCacheAt=Date.now();
@@ -1882,12 +1883,16 @@ async function calcPtsTodosPropsKO(matchId, cfg){
       if(!snap.exists) continue;
       const pr=snap.data();
       const pts=_ptsPropsKO(pr, r, cfg)||0;
+      let ac=0, fl=0;
+      cfg.forEach(item=>{ if(pr[item.id]===undefined) return; if(pr[item.id]===r[item.id]) ac++; else fl++; });
       const oldScored=!!pr.calculado;
       const oldPts=oldScored?(pr.pts||0):0;
-      batch.set(ref,{pts:pts,calculado:true},{merge:true});
-      const d={ puntos:pts-oldPts, stPropsPts:pts-oldPts };
-      if(d.puntos){
-        batch.update(db.collection('usuarios').doc(uid),{ puntos:inc(d.puntos), stPropsPts:inc(d.stPropsPts) });
+      const oldAc=oldScored?(pr.ac||0):0;
+      const oldFl=oldScored?(pr.fl||0):0;
+      batch.set(ref,{pts:pts,ac:ac,fl:fl,calculado:true},{merge:true});
+      const d={ puntos:pts-oldPts, stPropsPts:pts-oldPts, stPropsAciertos:ac-oldAc, stPropsFallas:fl-oldFl };
+      if(d.puntos||d.stPropsAciertos||d.stPropsFallas){
+        batch.update(db.collection('usuarios').doc(uid),{ puntos:inc(d.puntos), stPropsPts:inc(d.stPropsPts), stPropsAciertos:inc(d.stPropsAciertos), stPropsFallas:inc(d.stPropsFallas) });
         deltas[uid]=d;
       }
     }
@@ -1988,9 +1993,29 @@ async function recalcularTotalesCompleto(){
           else koFallas++;
         });
       }catch(e){ errores.push('KO '+(udata.nombre||uid)+': '+(e.code||e.message)); }
+      // Preguntas extra (props 3er puesto / final) — ¡también suman al total!
+      let propsHechos=0, propsAciertos=0, propsFallas=0, propsPts=0;
+      try{
+        const prSnap=await db.collection('pronosticosPropsKO').doc(uid).collection('partidos').get();
+        prSnap.forEach(d=>{
+          const cfg=(typeof getPropsKO==='function')?getPropsKO(d.id):null;
+          if(!cfg) return;
+          const pr=d.data();
+          propsHechos++;
+          const r=resultadosPropsKO[d.id];
+          if(!r||!r.terminado) return;
+          cfg.forEach(item=>{
+            if(pr[item.id]===undefined) return;
+            if(pr[item.id]===r[item.id]){ propsAciertos++; propsPts+=item.puntos; }
+            else propsFallas++;
+          });
+        });
+        puntos+=propsPts;
+      }catch(e){ errores.push('props '+(udata.nombre||uid)+': '+(e.code||e.message)); }
       const tot={puntos,aciertos,stExactos:ex,stCorrectos:co,stFallas:fa,stHechos:he,
         stClasPts:clasPts,stClasAciertos:clasAciertos,stClasEval:clasEval,
-        stKoHechos:koHechos,stKoExactos:koExactos,stKoAciertos:koAciertos,stKoFallas:koFallas,stKoPts:koPts};
+        stKoHechos:koHechos,stKoExactos:koExactos,stKoAciertos:koAciertos,stKoFallas:koFallas,stKoPts:koPts,
+        stPropsHechos:propsHechos,stPropsAciertos:propsAciertos,stPropsFallas:propsFallas,stPropsPts:propsPts};
       batch.update(db.collection('usuarios').doc(uid),tot);
       filas.push({id:uid, nombre:udata.nombre, email:udata.email, admin:udata.admin, ...tot});
     }
@@ -2074,8 +2099,22 @@ function carnetHTML(o){
       <div class="cn-st"><span class="cn-n bad">${o.koFallas||0}</span><span class="cn-l">Fallas ✗</span></div>
       <div class="cn-st"><span class="cn-n">${o.koPts||0}</span><span class="cn-l">Puntos KO (${koPct}% efec.)</span></div>
     </div>`:`<div class="cn-clas" style="color:var(--g3)">Aún sin pronósticos de fase final.</div>`}
-
-    <div class="cn-foot">⚽ <strong>${o.hechos||0}</strong> pronósticos en grupos · 🏆 <strong>${koHechos}</strong> en fase final</div>
+${(()=>{
+      const prHechos=o.propsHechos||0;
+      const prAny=prHechos||o.propsPts||o.propsAciertos||o.propsFallas;
+      if(!prAny) return '';
+      const prEval=(o.propsAciertos||0)+(o.propsFallas||0);
+      const prPct=prEval?Math.round(((o.propsAciertos||0)/prEval)*100):0;
+      return `
+    <div class="cn-sec-lbl props">🎯 Preguntas extra (3er puesto · final)</div>
+    <div class="cn-grid">
+      <div class="cn-st"><span class="cn-n ok">${o.propsAciertos||0}</span><span class="cn-l">Aciertos ✓</span></div>
+      <div class="cn-st"><span class="cn-n bad">${o.propsFallas||0}</span><span class="cn-l">Fallas ✗</span></div>
+      <div class="cn-st"><span class="cn-n">${o.propsPts||0}</span><span class="cn-l">Puntos extra</span></div>
+      <div class="cn-st"><span class="cn-n">${prPct}%</span><span class="cn-l">Efectividad (${prEval} eval.)</span></div>
+    </div>`;
+    })()}
+    <div class="cn-foot">⚽ <strong>${o.hechos||0}</strong> pronósticos en grupos · 🏆 <strong>${koHechos}</strong> en fase final${(o.propsHechos||0)?` · 🎯 <strong>${o.propsHechos}</strong> con extras`:''}</div>
   </div>`;
 }
 
@@ -2112,9 +2151,25 @@ function misStatsLive(){
       else koFallas++;
     });
   }
+  // ── PREGUNTAS EXTRA (props 3er puesto / final) ──
+  let propsHechos=0, propsAciertos=0, propsFallas=0, propsPts=0;
+  Object.keys(misPropsKO||{}).forEach(pid=>{
+    const cfg=(typeof getPropsKO==='function')?getPropsKO(pid):null;
+    if(!cfg) return;
+    const pr=misPropsKO[pid];
+    propsHechos++;
+    const r=resultadosPropsKO[pid];
+    if(!r||!r.terminado) return;
+    cfg.forEach(item=>{
+      if(pr[item.id]===undefined) return;
+      if(pr[item.id]===r[item.id]){ propsAciertos++; propsPts+=item.puntos; }
+      else propsFallas++;
+    });
+  });
   return {hechos, exactos, correctos, fallas,
     clasPts, clasAciertos, clasEval,
-    koHechos, koExactos, koAciertos, koFallas, koPts};
+    koHechos, koExactos, koAciertos, koFallas, koPts,
+    propsHechos, propsAciertos, propsFallas, propsPts};
 }
 
 async function renderPerfil(){
@@ -2144,7 +2199,8 @@ async function verPerfil(uid){
     mc.innerHTML=carnetHTML({nombre:u.nombre||u.email, puntos:u.puntos||0, puesto, total,
       exactos:u.stExactos||0, correctos:u.stCorrectos||0, fallas:u.stFallas||0, hechos:u.stHechos||0,
       clasPts:u.stClasPts||0, clasAciertos:u.stClasAciertos||0, clasEval:u.stClasEval||0,
-      koHechos:u.stKoHechos||0, koExactos:u.stKoExactos||0, koAciertos:u.stKoAciertos||0, koFallas:u.stKoFallas||0, koPts:u.stKoPts||0});
+      koHechos:u.stKoHechos||0, koExactos:u.stKoExactos||0, koAciertos:u.stKoAciertos||0, koFallas:u.stKoFallas||0, koPts:u.stKoPts||0,
+      propsHechos:u.stPropsHechos||0, propsAciertos:u.stPropsAciertos||0, propsFallas:u.stPropsFallas||0, propsPts:u.stPropsPts||0});
   }catch(e){mc.innerHTML='<p style="color:var(--er);font-size:.75rem;padding:1rem">Error al cargar el perfil.</p>';}
 }
 function cerrarPerfil(){document.getElementById('pf-overlay').classList.remove('show');}
