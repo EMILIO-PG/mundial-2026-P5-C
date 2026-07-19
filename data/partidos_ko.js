@@ -239,7 +239,7 @@ const PARTIDO_TERCERO = {
 // ── FINAL ────────────────────────────────────────────────────────────────────
 const PARTIDO_FINAL = {
   id:"M104", ronda:"F",
-  fecha:"2026-07-19", hora:"15:00", sede:"Nueva Jersey",
+  fecha:"2026-07-19", hora:"14:00", sede:"Nueva Jersey",
   local:null, visitante:null,
   ganadorDe:{ local:"M101", visitante:"M102" },
 };
